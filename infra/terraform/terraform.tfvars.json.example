@@ -1,0 +1,11 @@
+{
+  "server_os": "",
+  "server_identity": "",
+  "docker_host": "",
+  "platform": "",
+  "image": "",
+  "secrets_host_path": "",
+  "guild_id": "",
+  "name": "argument-arena",
+  "sync_commands": true
+}
