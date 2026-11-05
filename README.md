@@ -285,4 +285,15 @@ Read-only spectators should still be able to invoke permitted application comman
 - [ ] **Training:** Logically Fallacious references, focused drills, mixed puzzles, bot battles, explanations, and progress tracking.
 - [ ] **Profiles:** topic interests, positions argued, argument tendencies, evidence links, user controls, and personalized practice recommendations.
 
-No programming language, Discord library, hosting environment, database, LLM provider, or research provider has been selected. Those choices should follow the feature plan rather than be presented as existing capabilities.
+Implementation will use Python with discord.py, hosted on the owner's server. Infrastructure and deployment will be defined as code using Terraform and appropriate host configuration tools. The bot and its infrastructure have not been implemented. Database, LLM provider, and research provider choices remain open.
+
+## Development validation
+
+With Python 3.12, install the pinned validation dependencies and run the shared validation entry point:
+
+```bash
+python3 -m pip install --requirement requirements-dev.txt
+bash scripts/validate.sh
+```
+
+Validation currently checks all repository Markdown because the repository contains only the feature proposal. When adding the bot or infrastructure, extend `scripts/validate.sh` and its dependency setup with the relevant application tests, lint, build, and infrastructure checks. Keep this entry point and the required `Clusterfork validation` CI check aligned so remote development validates the code it changes.
