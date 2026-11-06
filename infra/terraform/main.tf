@@ -50,6 +50,10 @@ resource "docker_container" "bot" {
     "AA_GUILD_ID=${var.guild_id}",
     "AA_SYNC_COMMANDS=${var.sync_commands}",
     "AA_LOG_LEVEL=INFO",
+    "AA_LLM_KEY_FILE=${var.llm_enabled ? "/run/secrets/llm-key" : ""}",
+    "AA_SEARCH_KEY_FILE=${var.search_enabled ? "/run/secrets/search-key" : ""}",
+    "AA_LLM_MODEL=${var.llm_model}",
+    "AA_LLM_ENDPOINT=${var.llm_endpoint}",
   ]
   mounts {
     type   = "volume"

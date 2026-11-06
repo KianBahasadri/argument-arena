@@ -4,6 +4,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 class ConfigurationError(ValueError):
@@ -17,6 +18,10 @@ class Config:
     data_dir: Path = Path(".state")
     sync_commands: bool = True
     log_level: str = "INFO"
+    llm_key_file: str | None = None
+    search_key_file: str | None = None
+    llm_model: str = "gpt-4.1-mini"
+    llm_endpoint: str = "https://api.openai.com/v1/chat/completions"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Config":
@@ -36,7 +41,36 @@ class Config:
         level = env.get("AA_LOG_LEVEL", "INFO").upper()
         if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ConfigurationError("AA_LOG_LEVEL must be a standard logging level")
-        return cls(int(guild), Path(token_file), Path(data_dir), sync == "true", level)
+        model = env.get("AA_LLM_MODEL", "gpt-4.1-mini")
+        if not model or len(model) > 100 or any(c.isspace() for c in model):
+            raise ConfigurationError("AA_LLM_MODEL must name a model")
+        endpoint = env.get("AA_LLM_ENDPOINT", "https://api.openai.com/v1/chat/completions")
+        try:
+            parsed = urlsplit(endpoint)
+            valid = (
+                parsed.scheme == "https"
+                and parsed.hostname
+                and not parsed.username
+                and not parsed.password
+                and parsed.port in (None, 443)
+                and not parsed.fragment
+                and not parsed.query
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ConfigurationError("AA_LLM_ENDPOINT must be an HTTPS API URL without credentials")
+        return cls(
+            int(guild),
+            Path(token_file),
+            Path(data_dir),
+            sync == "true",
+            level,
+            env.get("AA_LLM_KEY_FILE") or None,
+            env.get("AA_SEARCH_KEY_FILE") or None,
+            model,
+            endpoint,
+        )
 
     def read_token(self) -> str:
         try:

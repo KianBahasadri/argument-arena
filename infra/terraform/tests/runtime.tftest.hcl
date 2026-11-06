@@ -54,6 +54,10 @@ run "secure_runtime" {
       "AA_GUILD_ID=123456789012345678",
       "AA_SYNC_COMMANDS=true",
       "AA_LOG_LEVEL=INFO",
+      "AA_LLM_KEY_FILE=",
+      "AA_SEARCH_KEY_FILE=",
+      "AA_LLM_MODEL=gpt-4.1-mini",
+      "AA_LLM_ENDPOINT=https://api.openai.com/v1/chat/completions",
     ]) && length(docker_container.bot.upload) == 0
     error_message = "Only non-secret configuration belongs in Terraform."
   }
@@ -96,4 +100,27 @@ run "reject_incomplete_or_unsafe_inputs" {
     name              = "invalid installation name"
   }
   expect_failures = [var.server_os, var.server_identity, var.docker_host, var.platform, var.image, var.secrets_host_path, var.guild_id, var.name]
+}
+
+run "runtime_provider_configuration" {
+  command = plan
+  variables {
+    llm_enabled    = true
+    search_enabled = true
+    llm_model      = "operator-model"
+    llm_endpoint   = "https://api.example.org/v1/chat/completions"
+  }
+  assert {
+    condition     = contains(docker_container.bot.env, "AA_LLM_KEY_FILE=/run/secrets/llm-key") && contains(docker_container.bot.env, "AA_SEARCH_KEY_FILE=/run/secrets/search-key") && contains(docker_container.bot.env, "AA_LLM_MODEL=operator-model")
+    error_message = "Providers must receive file references and non-secret runtime configuration."
+  }
+}
+
+run "reject_unsafe_provider_configuration" {
+  command = plan
+  variables {
+    llm_model    = "contains whitespace"
+    llm_endpoint = "https://user:secret@example.org/endpoint"
+  }
+  expect_failures = [var.llm_model, var.llm_endpoint]
 }

@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 from contextlib import nullcontext
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -35,6 +36,7 @@ class FakeClient:
     def __init__(self, config, storage):
         self.config = config
         self.gateway_ready = True
+        self.worker = SimpleNamespace(run=lambda: asyncio.Event().wait())
         self.close = AsyncMock()
         self.started = asyncio.Event()
         FakeClient.instance = self
@@ -80,7 +82,9 @@ async def test_shutdown_closes_client_database_tasks_and_releases_lock(runtime_c
     assert FakeClient.instance.close.await_count >= 1
     assert not healthy(runtime_config.data_dir)
     assert not [
-        t for t in asyncio.all_tasks() if t.get_name() in {"gateway", "heartbeat", "shutdown"}
+        t
+        for t in asyncio.all_tasks()
+        if t.get_name() in {"gateway", "heartbeat", "shutdown", "arena-worker"}
     ]
     with process_lock(runtime_config.data_dir):
         pass
@@ -124,7 +128,8 @@ from argument_arena.config import Config
 class Client:
     gateway_ready = True
     close = AsyncMock()
-    def __init__(self, *_): pass
+    def __init__(self, *_): self.worker = self
+    async def run(self): await asyncio.Event().wait()
     async def __aenter__(self): return self
     async def __aexit__(self, *_): await self.close()
     async def start(self, *args, **kwargs): await asyncio.Event().wait()

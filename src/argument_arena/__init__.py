@@ -1,3 +1,3 @@
-"""Argument Arena's runtime and persistence foundation."""
+"""Argument Arena debate, research and reasoning practice bot."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

@@ -14,8 +14,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run repository validation
+      - name: Validate product, documentation, container and Terraform
         env:
+          AA_LLM_KEY_FILE: ''
+          AA_SEARCH_KEY_FILE: ''
           CLUSTERFORK_VALIDATION_COMMANDS: >-
             [["python3", "-m", "pip", "install", "--require-hashes", "--requirement", "requirements-dev.txt"],
              ["bash", "scripts/validate.sh"]]
