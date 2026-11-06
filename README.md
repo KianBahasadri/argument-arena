@@ -2,7 +2,9 @@
 
 A Discord bot for a server built around arguments: organize one-on-one debate matches, moderate the conversation, research claims, score arguments with LLMs, and help members improve through feedback and practice.
 
-**Status: feature proposal.** This repository currently contains the product plan. The bot, commands, integrations, and features below are proposed and have not been implemented. Command names, defaults, rating rules, and implementation phases are initial design suggestions.
+**Status: runnable technical foundation; product features remain proposed.** The installable Python 3.12 / discord.py package provides an Administrator-only `/diagnostic` command, validated configuration, reconnect/shutdown handling, durable SQLite storage and migrations, a non-root container, and Terraform deployment to an operator-supplied Docker endpoint. Offline tests and CI cover the foundation. The owner's server OS, platform, identity, and access details are intentionally blank; no live Discord connection or server deployment has been verified.
+
+Start with [local setup and Discord application configuration](docs/getting-started.md), [deployment and recovery](docs/deployment.md), [storage and extension contracts](docs/architecture.md), and [development validation](docs/development.md). The bot commands, integrations, and product features below remain proposed; command names, defaults, rating rules, and phases are design suggestions for the dependent features issue.
 
 ## Requested feature scope
 
@@ -285,15 +287,16 @@ Read-only spectators should still be able to invoke permitted application comman
 - [ ] **Training:** Logically Fallacious references, focused drills, mixed puzzles, bot battles, explanations, and progress tracking.
 - [ ] **Profiles:** topic interests, positions argued, argument tendencies, evidence links, user controls, and personalized practice recommendations.
 
-Implementation will use Python with discord.py, hosted on the owner's server. Infrastructure and deployment will be defined as code using Terraform and appropriate host configuration tools. The bot and its infrastructure have not been implemented. Database, LLM provider, and research provider choices remain open.
+The technical foundation uses Python 3.12 with discord.py, a single process, and durable SQLite storage. Terraform defines a portable container deployment on the owner's existing server; a [declarative host adapter contract](docs/host-adapter.md) keeps OS-specific setup pending the deliberately unspecified server inputs. The product phases above remain unimplemented. LLM and research providers remain open choices.
 
 ## Development validation
 
-With Python 3.12, install the pinned validation dependencies and run the shared validation entry point:
+With Python 3.12, Bash, and a local Docker daemon running Linux containers, install the pinned tools and package and run the shared validation entry point. It obtains checksum-verified Terraform 1.13.5 automatically when that version is absent from PATH:
 
 ```bash
-python3 -m pip install --requirement requirements-dev.txt
+bash scripts/setup-dev.sh
+source .venv/bin/activate
 bash scripts/validate.sh
 ```
 
-Validation currently checks all repository Markdown because the repository contains only the feature proposal. When adding the bot or infrastructure, extend `scripts/validate.sh` and its dependency setup with the relevant application tests, lint, build, and infrastructure checks. Keep this entry point and the required `Clusterfork validation` CI check aligned so remote development validates the code it changes.
+Validation checks Python lint/format, application/configuration/persistence tests, Markdown, Python package builds, a real container build and isolated persistence/recovery smoke checks, Terraform fmt/validate, and provider-mocked plans. It requires no Discord token, server credentials, or live apply. The required **Clusterfork validation** CI job runs the same entry point. See [development](docs/development.md) for tool setup and dependency updates.
