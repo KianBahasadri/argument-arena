@@ -2,9 +2,9 @@
 
 A Discord bot for a server built around arguments: organize one-on-one debate matches, moderate the conversation, research claims, score arguments with LLMs, and help members improve through feedback and practice.
 
-**Status: runnable technical foundation; product features remain proposed.** The installable Python 3.12 / discord.py package provides an Administrator-only `/diagnostic` command, validated configuration, reconnect/shutdown handling, durable SQLite storage and migrations, a non-root container, and Terraform deployment to an operator-supplied Docker endpoint. Offline tests and CI cover the foundation. The owner's server OS, platform, identity, and access details are intentionally blank; no live Discord connection or server deployment has been verified.
+**Status: complete product implementation on the merged Python 3.12 / discord.py foundation.** Server setup, negotiated matches, durable lifecycle, sourced research, configurable assistance/judging, Elo competition, original reasoning training and consent-controlled profiles are implemented with offline tests. The non-root container, SQLite migrations/backup, Terraform deployment and shared validation entry point are retained. The owner's server inputs remain intentionally blank; no live Discord installation, paid provider call or deployment is claimed.
 
-Start with [local setup and Discord application configuration](docs/getting-started.md), [deployment and recovery](docs/deployment.md), [storage and extension contracts](docs/architecture.md), and [development validation](docs/development.md). The bot commands, integrations, and product features below remain proposed; command names, defaults, rating rules, and phases are design suggestions for the dependent features issue.
+Start with [installation and Discord intents](docs/getting-started.md), [product settings and policies](docs/product.md), [executable commands](docs/commands.md), [feature-to-test checklist](docs/feature-checklist.md), [deployment/recovery](docs/deployment.md), [architecture](docs/architecture.md) and [development validation](docs/development.md). The sections below retain the complete product specification; the linked policy documents the selected defaults, integrations, rubric, rating formula and exact command arguments.
 
 ## Requested feature scope
 
@@ -23,7 +23,7 @@ Start with [local setup and Discord application configuration](docs/getting-star
 - Move finished match channels into the appropriate server categories automatically.
 - Build user profiles covering positions argued for or against, interests, and patterns in argument style, including moral versus empirical themes and technology or engineering versus art.
 
-The sections below expand those requests into proposed behavior. Additional controls, command names, and defaults are suggestions for implementation rather than settled requirements.
+The sections below define the delivered behavior. The [product policy](docs/product.md) records the implementation choices and exact defaults.
 
 ## Match workflow
 
@@ -75,9 +75,9 @@ Discord documents separate permissions for parent-channel messages and messages 
 
 Every optional per-match feature must expose an explicit on/off control during setup. Features with parameters also expose those parameters. The bot shows the effective settings before acceptance and saves that configuration with the match.
 
-These are suggested starting defaults, not final policy:
+These are the implemented starting defaults; effective settings are shown before acceptance:
 
-| Feature | On/off behavior | Additional settings | Suggested default |
+| Feature | On/off behavior | Additional settings | Starting default |
 | --- | --- | --- | --- |
 | Public claim tracking | Publish attributed claims and their status | Update frequency and detail | On |
 | Background fact checking | Research factual claims as the match progresses | Research depth, source preferences, budget | On |
@@ -163,7 +163,7 @@ If automatic archival is enabled, the bot moves the channel to the destination f
 - Keep final judging separate from live scores, audience sentiment, and timeout outcomes.
 - Allow a disputed judgment to be reviewed by staff. An amended result must update the record and any affected ratings.
 
-The initial scoring scale, weights, tie thresholds, and review process remain open implementation choices.
+The implemented [Arena-v1 rubric and review policy](docs/product.md#judging-and-competition) defines scores, weights, tie thresholds and corrections.
 
 ## Leaderboards and competitive records
 
@@ -177,7 +177,7 @@ The initial scoring scale, weights, tie thresholds, and review process remain op
 - Show rating changes and the reason for each update, including reversals after a corrected result.
 - Treat emoji counts and any audience vote as separate social feedback rather than the official competitive score.
 
-The proposed ranked preset requires final judging and consistent scoring rules. Its exact rating formula, minimum activity, treatment of forfeits, and repeat-opponent rules remain to be decided.
+The implemented ranked-v1 preset requires consistent judging, turn and limit rules. [Rating policy](docs/product.md#judging-and-competition) specifies Elo, activity eligibility, forfeits and repeat-opponent limits.
 
 ## Argument training
 
@@ -219,7 +219,7 @@ Initial practice topics can include:
 | Cherry picking | [Cherry Picking](https://www.logicallyfallacious.com/logicalfallacies/Cherry-Picking) |
 | Shifting the burden of proof | [Shifting of the Burden of Proof](https://www.logicallyfallacious.com/logicalfallacies/Shifting-of-the-Burden-of-Proof) |
 
-The initial list is a starting set; practice should expand to additional entries in the library. The library is a reference for curriculum design, not an implemented integration in this repository.
+The original curriculum implements these eight families plus red herring and appeal to popularity, with per-entry attribution and reference links. It uses original exercises and teaching notes; it does not copy the library in bulk. [Training policy](docs/product.md#training-and-profiles) covers grading, variants and progression.
 
 ## User profiles and argument tendencies
 
@@ -244,9 +244,9 @@ Descriptions must show their evidence and sample size and distinguish observed a
 
 Users can view the evidence behind a profile observation, correct a mischaracterization, choose visibility, disable future tendency analysis, and request removal of generated insights. Profile analysis uses eligible bot-managed matches and opted-in training; it does not assume permission to analyze unrelated server conversations. Match-level profile settings and each user's preferences both apply.
 
-## Proposed command surface
+## Command surface
 
-All commands below are illustrative. Buttons, select menus, and forms can handle settings that would be cumbersome as slash-command arguments.
+The commands below are implemented. Buttons, select menus and forms expose settings. See [exact command arguments and additional controls](docs/commands.md).
 
 | Command | Purpose |
 | --- | --- |
@@ -268,7 +268,7 @@ All commands below are illustrative. Buttons, select menus, and forms can handle
 | `/match result <id>` | Retrieve a completed result and feedback |
 | `/match archive <id>` | Let authorized staff archive a finished channel manually |
 | `/leaderboard` | View competitive standings and filters |
-| `/profile [@member]` | View an available debate profile and history |
+| `/profile view [member]` | View an available debate profile and history |
 | `/profile settings` | Manage profile analysis and visibility preferences |
 | `/profile remove-insights` | Request removal of generated tendency analysis |
 | `/train start` | Start a puzzle or training battle |
@@ -278,16 +278,16 @@ All commands below are illustrative. Buttons, select menus, and forms can handle
 
 Read-only spectators should still be able to invoke permitted application commands, including issuing a new challenge. Interaction responses and settings forms must respect the main-channel conversation rules.
 
-## Proposed implementation phases
+## Implementation phases
 
-- [ ] **Match foundation:** administrator setup, challenges, mutual acceptance, settings, channel permissions, reactions, public threads, and challenges originating in threads.
-- [ ] **Lifecycle:** turn tracking, 24-hour response deadlines, reminders, concessions, draws, forfeits, moderator controls, durable results, and category archival.
-- [ ] **Argument assistance:** claim attribution, background research, evidence-linked corrections, configurable moderation, and dispute handling.
-- [ ] **Judging and competition:** final scoring, post-match feedback, ranked presets, records, ratings, and leaderboards.
-- [ ] **Training:** Logically Fallacious references, focused drills, mixed puzzles, bot battles, explanations, and progress tracking.
-- [ ] **Profiles:** topic interests, positions argued, argument tendencies, evidence links, user controls, and personalized practice recommendations.
+- [x] **Match foundation:** administrator setup, challenges, mutual acceptance, settings, channel permissions, reactions, public threads, and challenges originating in threads.
+- [x] **Lifecycle:** turn tracking, 24-hour response deadlines, reminders, concessions, draws, forfeits, moderator controls, durable results, and category archival.
+- [x] **Argument assistance:** claim attribution, background research, evidence-linked corrections, configurable moderation, and dispute handling.
+- [x] **Judging and competition:** final scoring, post-match feedback, ranked presets, records, ratings, and leaderboards.
+- [x] **Training:** Logically Fallacious references, focused drills, mixed puzzles, bot battles, explanations, and progress tracking.
+- [x] **Profiles:** topic interests, positions argued, argument tendencies, evidence links, user controls, and personalized practice recommendations.
 
-The technical foundation uses Python 3.12 with discord.py, a single process, and durable SQLite storage. Terraform defines a portable container deployment on the owner's existing server; a [declarative host adapter contract](docs/host-adapter.md) keeps OS-specific setup pending the deliberately unspecified server inputs. The product phases above remain unimplemented. LLM and research providers remain open choices.
+The technical foundation uses Python 3.12 with discord.py, a single process, and durable SQLite storage. Terraform defines a portable container deployment on the owner's existing server; a [declarative host adapter contract](docs/host-adapter.md) keeps OS-specific setup pending the deliberately unspecified server inputs. All product phases above are implemented. OpenAI-compatible JSON Chat Completions and Brave search with HTTPS retrieval are configurable runtime integrations; absent keys produce explicit unavailable states. See the [feature checklist](docs/feature-checklist.md).
 
 ## Development validation
 
@@ -299,4 +299,4 @@ source .venv/bin/activate
 bash scripts/validate.sh
 ```
 
-Validation checks Python lint/format, application/configuration/persistence tests, Markdown, Python package builds, a real container build and isolated persistence/recovery smoke checks, Terraform fmt/validate, and provider-mocked plans. It requires no Discord token, server credentials, or live apply. The required **Clusterfork validation** CI job runs the same entry point. See [development](docs/development.md) for tool setup and dependency updates.
+Validation checks Python lint/format, application/configuration/persistence/product tests and command/settings contracts, Markdown, Python package builds, a real container build and isolated persistence/recovery smoke checks, Terraform fmt/validate, and provider-mocked plans. It requires no Discord token, server credentials, or live apply. The required **Clusterfork validation** CI job runs the same entry point. See [development](docs/development.md) for tool setup and dependency updates.

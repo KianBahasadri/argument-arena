@@ -19,7 +19,7 @@ async def test_migrations_are_idempotent_and_state_survives_restart(tmp_path):
         assert await storage.get("guild:1", "config") == {"enabled": True, "roles": [1, 2]}
         assert await storage.get("guild:2", "config") == "another guild"
         async with storage.connection.execute("SELECT COUNT(*) FROM schema_migrations") as cursor:
-            assert await cursor.fetchone() == (1,)
+            assert await cursor.fetchone() == (len(MIGRATIONS),)
 
 
 async def test_failed_and_cancelled_transactions_rollback(tmp_path):
@@ -40,7 +40,7 @@ async def test_bad_migration_rolls_back_ddl_and_version(tmp_path):
     path = tmp_path / "arena.sqlite3"
     async with Storage(path):
         pass
-    bad = Migration(2, "bad", ("CREATE TABLE future(id INTEGER)", "INVALID SQL"))
+    bad = Migration(len(MIGRATIONS) + 1, "bad", ("CREATE TABLE future(id INTEGER)", "INVALID SQL"))
     with pytest.raises(sqlite3.OperationalError):
         async with Storage(path, (*MIGRATIONS, bad)):
             pass
@@ -53,7 +53,9 @@ async def test_bad_migration_rolls_back_ddl_and_version(tmp_path):
 
 async def test_unknown_and_changed_migrations_refuse_start(tmp_path):
     path = tmp_path / "arena.sqlite3"
-    async with Storage(path, (*MIGRATIONS, Migration(2, "future", ("SELECT 1",)))):
+    async with Storage(
+        path, (*MIGRATIONS, Migration(len(MIGRATIONS) + 1, "future", ("SELECT 1",)))
+    ):
         pass
     with pytest.raises(MigrationError):
         async with Storage(path):
@@ -81,7 +83,9 @@ async def test_incompatible_restore_keeps_original_data(tmp_path):
     path, newer = tmp_path / "arena.sqlite3", tmp_path / "newer.sqlite3"
     async with Storage(path) as storage:
         await storage.put("test", "original", True)
-    async with Storage(newer, (*MIGRATIONS, Migration(2, "future", ("SELECT 1",)))):
+    async with Storage(
+        newer, (*MIGRATIONS, Migration(len(MIGRATIONS) + 1, "future", ("SELECT 1",)))
+    ):
         pass
     with pytest.raises(MigrationError):
         await restore(newer, path)

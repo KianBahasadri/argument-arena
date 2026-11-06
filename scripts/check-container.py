@@ -44,6 +44,26 @@ async def exercise():
         previous = await db.get('validation', 'value', 0)
         await db.put('validation', 'value', previous + 1)
         assert await db.get('validation', 'value') == previous + 1
+        from argument_arena.arena import Arena
+        from argument_arena.settings import Actor
+        from argument_arena.training import Training
+        from argument_arena.providers import OpenAI
+        arena = Arena(db)
+        owner, opponent = Actor('10', '123', admin=True), Actor('20', '123')
+        match_id = await db.get('validation', 'match')
+        if match_id is None:
+            await arena.setup(owner, {'categories': {'active': '1'}})
+            match = await arena.challenge(owner, opponent.id, 'Offline product recovery',
+                                           ['Support', 'Oppose'], 'https://discord.com/channels/123/999')
+            await arena.accept(owner, match['id'], 1)
+            await arena.accept(opponent, match['id'], 1)
+            await arena.attach_channel(match['id'], '900')
+            await arena.action(owner, match['id'], 'concede')
+            await db.put('validation', 'match', match['id'])
+            await Training(arena, OpenAI()).start(owner, 'repair')
+        else:
+            assert (await arena.result(match_id, '123'))['outcome'] == 'concession'
+            assert (await Training(arena, OpenAI()).current(owner))['mode'] == 'repair'
 asyncio.run(exercise())
 """
         for _ in range(2):
@@ -59,13 +79,16 @@ from argument_arena.storage import Storage
 async def check():
     async with Storage(Path('/var/lib/argument-arena/arena.sqlite3')) as db:
         assert await db.get('validation', 'value') == 2
+        from argument_arena.arena import Arena
+        match_id = await db.get('validation', 'match')
+        assert (await Arena(db).result(match_id, '123'))['winner'] == '20'
 asyncio.run(check())
 """
         call(*options, "--entrypoint", "python", image, "-c", verify)
         # Probe behavior is local and does not read Discord configuration.
         probe = subprocess.run([*options, image, "healthcheck"], check=False, timeout=30)
         assert probe.returncode == 1
-        print("Container build, non-root persistence, backup and restore passed")
+        print("Container build, non-root product persistence, backup and restore passed")
     finally:
         subprocess.run(
             ["docker", "volume", "rm", volume], check=False, capture_output=True, timeout=30

@@ -13,7 +13,7 @@ The adapter accepts the owner's OS/version, server identity, chosen architecture
 | Recorded OS and daemon identity | `server_os`, `server_identity` matching Docker `info.Name` |
 | Explicit socket or SSH Docker endpoint | `docker_host`, no password/key material |
 | Linux OCI runtime architecture | `platform`, either `linux/amd64` or `linux/arm64` |
-| Dedicated secret directory in daemon filesystem | `secrets_host_path`, containing externally provisioned `discord-token` |
+| Dedicated secret directory in daemon filesystem | `secrets_host_path`, containing externally provisioned `discord-token`, and optional `llm-key`/`search-key` for enabled providers |
 | Durable Docker local-volume storage | Persistent across Docker/service/host restarts; SQLite WAL and OS-lock support |
 | UID/GID mapping and path access | Container UID/GID 10001 can write state and read secrets; secrets are not world-readable |
 

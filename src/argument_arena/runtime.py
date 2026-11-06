@@ -56,6 +56,7 @@ async def run(config: Config, stop: asyncio.Event | None = None) -> None:
                         asyncio.create_task(client.start(token, reconnect=True), name="gateway"),
                         asyncio.create_task(heartbeat(client, storage, config), name="heartbeat"),
                         asyncio.create_task(stop.wait(), name="shutdown"),
+                        asyncio.create_task(client.worker.run(), name="arena-worker"),
                     ]
                     try:
                         done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)

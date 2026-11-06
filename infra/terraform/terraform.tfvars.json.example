@@ -7,5 +7,9 @@
   "secrets_host_path": "",
   "guild_id": "",
   "name": "argument-arena",
-  "sync_commands": true
+  "sync_commands": true,
+  "llm_enabled": false,
+  "search_enabled": false,
+  "llm_model": "gpt-4.1-mini",
+  "llm_endpoint": "https://api.openai.com/v1/chat/completions"
 }

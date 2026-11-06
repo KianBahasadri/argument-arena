@@ -11,7 +11,8 @@ export PATH="$(dirname -- "$terraform_binary"):$PATH"
 "$PYTHON" -m pip check
 "$PYTHON" -m ruff check src tests scripts
 "$PYTHON" -m ruff format --check src tests scripts
-"$PYTHON" -m pytest
+"$PYTHON" -m pytest --strict-config --strict-markers
+"$PYTHON" scripts/check-product-contract.py
 "$PYTHON" -m pymarkdown --config .pymarkdown.json scan --recurse --respect-gitignore .
 
 # Use an isolated copy so local tfvars, state and backends can never affect validation.

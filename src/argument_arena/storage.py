@@ -40,6 +40,44 @@ MIGRATIONS = (
             "PRIMARY KEY(namespace, key))",
         ),
     ),
+    Migration(
+        2,
+        "arena_product",
+        (
+            "CREATE TABLE documents (kind TEXT NOT NULL,id TEXT NOT NULL,data TEXT NOT NULL,"
+            "PRIMARY KEY(kind,id))",
+            "CREATE TABLE matches (id TEXT PRIMARY KEY,guild TEXT NOT NULL,channel TEXT UNIQUE,"
+            "state TEXT NOT NULL,created REAL NOT NULL,data TEXT NOT NULL)",
+            "CREATE INDEX matches_guild_state ON matches(guild,state)",
+            "CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT,match_id TEXT NOT NULL,"
+            "kind TEXT NOT NULL,actor TEXT,data TEXT NOT NULL,created REAL NOT NULL)",
+            "CREATE TABLE messages (id TEXT PRIMARY KEY,match_id TEXT NOT NULL"
+            " REFERENCES matches(id),"
+            "author TEXT NOT NULL,content TEXT NOT NULL,url TEXT NOT NULL,created REAL NOT NULL,"
+            "revision INTEGER NOT NULL DEFAULT 1,deleted INTEGER NOT NULL DEFAULT 0)",
+            "CREATE TABLE message_versions (message_id TEXT NOT NULL,revision INTEGER NOT NULL,"
+            "content TEXT NOT NULL,deleted INTEGER NOT NULL,created REAL NOT NULL,"
+            "PRIMARY KEY(message_id,revision))",
+            "CREATE TABLE claims (id TEXT PRIMARY KEY,match_id TEXT NOT NULL REFERENCES"
+            " matches(id),"
+            "message_id TEXT NOT NULL,revision INTEGER NOT NULL,data TEXT NOT NULL)",
+            "CREATE INDEX claims_match ON claims(match_id)",
+            "CREATE TABLE jobs (id TEXT PRIMARY KEY,kind TEXT NOT NULL,match_id"
+            " TEXT,data TEXT NOT NULL,"
+            "state TEXT NOT NULL DEFAULT 'pending',due REAL NOT NULL,lease REAL,"
+            "attempts INTEGER NOT NULL DEFAULT 0,error TEXT)",
+            "CREATE INDEX jobs_due ON jobs(state,due)",
+            "CREATE TABLE results (match_id TEXT PRIMARY KEY REFERENCES"
+            " matches(id),guild TEXT NOT NULL,"
+            "created REAL NOT NULL,revision INTEGER NOT NULL,data TEXT NOT NULL)",
+            "CREATE TABLE rating_changes (match_id TEXT NOT NULL,user_id TEXT NOT NULL,"
+            "before REAL NOT NULL,after REAL NOT NULL,reason TEXT NOT NULL,"
+            "PRIMARY KEY(match_id,user_id))",
+            "CREATE TABLE usage (id TEXT PRIMARY KEY,count INTEGER NOT NULL)",
+            "CREATE TABLE training (id TEXT PRIMARY KEY,guild TEXT NOT NULL,user_id TEXT NOT NULL,"
+            "state TEXT NOT NULL,data TEXT NOT NULL)",
+        ),
+    ),
 )
 
 

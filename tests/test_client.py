@@ -33,9 +33,18 @@ async def test_setup_sync_and_reconnect_lifecycle(tmp_path):
         assert client.gateway_ready
         await client.on_ready()
         client.tree.sync.assert_awaited_once()
-        assert client.intents.value == discord.Intents(guilds=True).value
+        assert client.intents.guild_messages and client.intents.message_content
+        assert client.intents.guild_reactions and not client.intents.members
         commands = client.tree.get_commands(guild=client.guild)
-        assert [command.name for command in commands] == ["diagnostic"]
+        assert {command.name for command in commands} == {
+            "diagnostic",
+            "match",
+            "profile",
+            "train",
+            "settings",
+            "setup",
+            "leaderboard",
+        }
         assert commands[0].guild_only
         assert commands[0].default_permissions.administrator
     assert client.is_closed()
