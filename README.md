@@ -2,7 +2,9 @@
 
 A Discord bot for a server built around arguments: organize one-on-one debate matches, moderate the conversation, research claims, score arguments with LLMs, and help members improve through feedback and practice.
 
-**Status: feature proposal.** This repository currently contains the product plan. The bot, commands, integrations, and features below are proposed and have not been implemented. Command names, defaults, rating rules, and implementation phases are initial design suggestions.
+**Status: implemented, awaiting live server verification.** The repository includes the discord.py bot, transactional SQLite persistence, match workflows, research and judging providers, training, consent-based profiles, tests, container packaging, and Guaranine deployment configuration. No image has been published or workload deployed by this implementation. External AI features require configured provider credentials.
+
+Start with the [command guide](docs/commands.md), [configuration](docs/configuration.md), [architecture and validation](docs/architecture.md), and [Guaranine deployment walkthrough](docs/deployment.md). The sections below retain the product requirements; the guides describe the implemented commands and chosen defaults.
 
 ## Requested feature scope
 
@@ -21,7 +23,7 @@ A Discord bot for a server built around arguments: organize one-on-one debate ma
 - Move finished match channels into the appropriate server categories automatically.
 - Build user profiles covering positions argued for or against, interests, and patterns in argument style, including moral versus empirical themes and technology or engineering versus art.
 
-The sections below expand those requests into proposed behavior. Additional controls, command names, and defaults are suggestions for implementation rather than settled requirements.
+The sections below describe the feature scope and intended behavior. Concrete command names, defaults and operational choices are documented in the guides above.
 
 ## Match workflow
 
@@ -161,7 +163,7 @@ If automatic archival is enabled, the bot moves the channel to the destination f
 - Keep final judging separate from live scores, audience sentiment, and timeout outcomes.
 - Allow a disputed judgment to be reviewed by staff. An amended result must update the record and any affected ratings.
 
-The initial scoring scale, weights, tie thresholds, and review process remain open implementation choices.
+The implemented scoring scale, weights, tie threshold and staff review process are documented in [configuration](docs/configuration.md).
 
 ## Leaderboards and competitive records
 
@@ -175,7 +177,7 @@ The initial scoring scale, weights, tie thresholds, and review process remain op
 - Show rating changes and the reason for each update, including reversals after a corrected result.
 - Treat emoji counts and any audience vote as separate social feedback rather than the official competitive score.
 
-The proposed ranked preset requires final judging and consistent scoring rules. Its exact rating formula, minimum activity, treatment of forfeits, and repeat-opponent rules remain to be decided.
+The ranked preset requires final judging, the shared scoring rubric, and turn enforcement. Elo starts at 1200 with K=32. Leaderboards support topic, time, preset and minimum-activity filters. Forfeits are unrated unless both players agree otherwise; repeat opponents are permitted. See [configuration](docs/configuration.md) for result eligibility and correction handling.
 
 ## Argument training
 
@@ -217,7 +219,7 @@ Initial practice topics can include:
 | Cherry picking | [Cherry Picking](https://www.logicallyfallacious.com/logicalfallacies/Cherry-Picking) |
 | Shifting the burden of proof | [Shifting of the Burden of Proof](https://www.logicallyfallacious.com/logicalfallacies/Shifting-of-the-Burden-of-Proof) |
 
-The initial list is a starting set; practice should expand to additional entries in the library. The library is a reference for curriculum design, not an implemented integration in this repository.
+The initial list is a starting set; practice should expand to additional entries in the library. The library supplies credited reference links; the bundled curriculum uses original exercises and explanations rather than copying its text.
 
 ## User profiles and argument tendencies
 
@@ -242,9 +244,9 @@ Descriptions must show their evidence and sample size and distinguish observed a
 
 Users can view the evidence behind a profile observation, correct a mischaracterization, choose visibility, disable future tendency analysis, and request removal of generated insights. Profile analysis uses eligible bot-managed matches and opted-in training; it does not assume permission to analyze unrelated server conversations. Match-level profile settings and each user's preferences both apply.
 
-## Proposed command surface
+## Command surface
 
-All commands below are illustrative. Buttons, select menus, and forms can handle settings that would be cumbersome as slash-command arguments.
+The command guide documents the complete interface, including `/profile view`, `/train answer`, `/match options`, source submission, staff review and corrections. Persistent buttons and a JSON settings form support match agreement.
 
 | Command | Purpose |
 | --- | --- |
@@ -276,24 +278,24 @@ All commands below are illustrative. Buttons, select menus, and forms can handle
 
 Read-only spectators should still be able to invoke permitted application commands, including issuing a new challenge. Interaction responses and settings forms must respect the main-channel conversation rules.
 
-## Proposed implementation phases
+## Implemented feature areas
 
-- [ ] **Match foundation:** administrator setup, challenges, mutual acceptance, settings, channel permissions, reactions, public threads, and challenges originating in threads.
-- [ ] **Lifecycle:** turn tracking, 24-hour response deadlines, reminders, concessions, draws, forfeits, moderator controls, durable results, and category archival.
-- [ ] **Argument assistance:** claim attribution, background research, evidence-linked corrections, configurable moderation, and dispute handling.
-- [ ] **Judging and competition:** final scoring, post-match feedback, ranked presets, records, ratings, and leaderboards.
-- [ ] **Training:** Logically Fallacious references, focused drills, mixed puzzles, bot battles, explanations, and progress tracking.
-- [ ] **Profiles:** topic interests, positions argued, argument tendencies, evidence links, user controls, and personalized practice recommendations.
+- [x] **Match foundation:** administrator setup, challenges, mutual acceptance, settings, channel permissions, reactions, public threads, and challenges originating in threads.
+- [x] **Lifecycle:** turn tracking, 24-hour response deadlines, reminders, concessions, draws, forfeits, moderator controls, durable results, and category archival.
+- [x] **Argument assistance:** claim attribution, background research, evidence-linked corrections, configurable moderation, and dispute handling.
+- [x] **Judging and competition:** final scoring, post-match feedback, ranked presets, records, ratings, and leaderboards.
+- [x] **Training:** Logically Fallacious references, focused drills, mixed puzzles, bot battles, explanations, and progress tracking.
+- [x] **Profiles:** topic interests, positions argued, argument tendencies, evidence links, user controls, and personalized practice recommendations.
 
-Implementation will use Python with discord.py, hosted on the owner's server. Infrastructure and deployment will be defined as code using Terraform and appropriate host configuration tools. The bot and its infrastructure have not been implemented. Database, LLM provider, and research provider choices remain open.
+The implementation uses Python 3.12 and discord.py, with one bot process and a persistent SQLite database. It supports OpenAI-compatible LLM providers and Tavily search. Infrastructure is defined in Terraform and a shared Kubernetes resource template; Guaranine uses a retained local volume on the selected worker. See the configuration guide for ranked rules and provider choices, and the deployment guide for storage and availability limits.
 
 ## Development validation
 
-With Python 3.12, install the pinned validation dependencies and run the shared validation entry point:
+With Python 3.12 in a virtual environment, install the pinned runtime and validation dependencies and run the shared validation entry point:
 
 ```bash
 python3 -m pip install --requirement requirements-dev.txt
 bash scripts/validate.sh
 ```
 
-Validation currently checks all repository Markdown because the repository contains only the feature proposal. When adding the bot or infrastructure, extend `scripts/validate.sh` and its dependency setup with the relevant application tests, lint, build, and infrastructure checks. Keep this entry point and the required `Clusterfork validation` CI check aligned so remote development validates the code it changes.
+Validation checks Markdown, Python lint, unit/integration tests, deployment security and networking invariants, and compilation. The required `Clusterfork validation` CI job uses the same entry point. Run Terraform formatting and validation as described in the architecture guide when changing infrastructure. Tests use fake Discord/provider boundaries; the operator must still verify a real rollout and provider accounts.

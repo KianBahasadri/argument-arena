@@ -1,0 +1,74 @@
+[
+  {
+    "id": "ad_hominem", "name": "Ad hominem", "aliases": ["personal attack", "abusive ad hominem", "appeal to the person"],
+    "source": "https://www.logicallyfallacious.com/logicalfallacies/Ad-Hominem-Abusive",
+    "argument": "Mira's proposal includes measurements showing the crossing is unsafe. Ignore her proposal: she has terrible taste in music.",
+    "explanation": "The criticism concerns Mira's taste, which does not address the measurements or the safety proposal.",
+    "hint": "Does the criticism change the evidence about the crossing?",
+    "repair": "Assess the crossing measurements and explain whether they support the proposed change."
+  },
+  {
+    "id": "straw_man", "name": "Straw man", "aliases": ["strawman", "misrepresentation"],
+    "source": "https://www.logicallyfallacious.com/logicalfallacies/Strawman-Fallacy",
+    "argument": "Niko suggests keeping the library open one extra hour on Thursdays. His opponent replies, 'Niko wants library staff to work around the clock without rest.'",
+    "explanation": "The reply replaces a limited extension with continuous operation, then attacks the substituted proposal.",
+    "hint": "Compare the proposal actually made with the one the reply attacks.",
+    "repair": "Address the costs and benefits of extending Thursday hours by one hour."
+  },
+  {
+    "id": "false_dilemma", "name": "False dilemma", "aliases": ["false dichotomy", "either or", "black and white thinking", "false choice"],
+    "source": "https://www.logicallyfallacious.com/logicalfallacies/False-Dilemma",
+    "argument": "We must either buy the most expensive telescope or abandon the astronomy club. There are no other ways to keep the club running.",
+    "explanation": "The argument excludes available alternatives, such as borrowing equipment or buying a less expensive telescope, without justification.",
+    "hint": "Can you identify an option missing from the stated choice?",
+    "repair": "Compare buying different telescopes, borrowing equipment, and continuing observation sessions with current equipment."
+  },
+  {
+    "id": "begging_the_question", "name": "Begging the question", "aliases": ["circular reasoning", "circular argument", "petitio principii"],
+    "source": "https://www.logicallyfallacious.com/logicalfallacies/Begging-the-Question",
+    "argument": "This ranking system is fair because it gives every player the rating they deserve. We know those ratings are deserved because this is a fair ranking system.",
+    "explanation": "The justification assumes the fairness it is meant to establish; no independent reason for the ratings is supplied.",
+    "hint": "Does either statement provide evidence independent of the conclusion?",
+    "repair": "Evaluate fairness using a specified criterion and independent match data."
+  },
+  {
+    "id": "hasty_generalization", "name": "Hasty generalization", "aliases": ["small sample", "overgeneralization", "insufficient sample"],
+    "source": "https://www.logicallyfallacious.com/logicalfallacies/Hasty-Generalization",
+    "argument": "The first two visitors I asked disliked the museum's new layout. Therefore every visitor dislikes the layout.",
+    "explanation": "Two visitors provide insufficient and potentially unrepresentative evidence for a claim about every visitor.",
+    "hint": "How broad is the conclusion compared with the sample?",
+    "repair": "Report what the two respondents said, then seek a larger and more representative survey before generalizing."
+  },
+  {
+    "id": "slippery_slope", "name": "Slippery slope", "aliases": ["domino fallacy", "unsupported chain"],
+    "source": "https://www.logicallyfallacious.com/logicalfallacies/Slippery-Slope",
+    "argument": "If we allow one bicycle rack outside the office, next the entire car park will become a bicycle depot, then the company will stop delivering products. No evidence is offered for these steps.",
+    "explanation": "The claimed chain of consequences lacks support for its intermediate steps. A possible consequence alone does not establish an inevitable progression.",
+    "hint": "What evidence links each step of the predicted chain?",
+    "repair": "Assess the space needed for one rack and support any predicted delivery effects with evidence."
+  },
+  {
+    "id": "cherry_picking", "name": "Cherry picking", "aliases": ["selective evidence", "suppressed evidence", "selection bias"],
+    "source": "https://www.logicallyfallacious.com/logicalfallacies/Cherry-Picking",
+    "argument": "A trial recorded nine days of lower energy use and twenty-one days of higher energy use. The advertisement displays only the nine lower-use days to claim that the upgrade saves energy overall.",
+    "explanation": "The advertisement selects favorable observations while omitting relevant contrary results needed to assess the overall claim.",
+    "hint": "Which relevant results are missing from the advertisement?",
+    "repair": "Present all trial observations and compare total energy use under comparable conditions."
+  },
+  {
+    "id": "burden_of_proof", "name": "Shifting the burden of proof", "aliases": ["shifting burden of proof", "burden shifting", "appeal to ignorance"],
+    "source": "https://www.logicallyfallacious.com/logicalfallacies/Shifting-of-the-Burden-of-Proof",
+    "argument": "I claim a hidden tunnel connects these two buildings. You cannot prove that no tunnel exists, so my claim must be accepted.",
+    "explanation": "The claimant provides no supporting evidence and treats another person's inability to disprove the claim as sufficient proof.",
+    "hint": "Who made the claim, and what evidence supports it?",
+    "repair": "Offer plans, surveys, or other relevant evidence for the tunnel; otherwise leave the claim unestablished."
+  },
+  {
+    "id": "sound", "name": "Valid supported argument", "aliases": ["valid", "sound", "no fallacy", "not fallacious", "modus ponens"],
+    "source": "https://www.logicallyfallacious.com/fallacies",
+    "argument": "In this exercise, every registered club member may vote, and Jo is a registered club member. Therefore Jo may vote.",
+    "explanation": "Given the stated premises, the conclusion follows by applying the general rule to Jo. The premises are stipulated for the exercise.",
+    "hint": "Apply the stated membership rule to Jo. Does the conclusion require an additional assumption?",
+    "repair": "The stated premises already support the conclusion; no repair is required."
+  }
+]

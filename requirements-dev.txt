@@ -11,3 +11,7 @@ tomli==2.5.0
 toolz==1.2.0
 typing-extensions==4.16.0
 wcwidth==0.9.4
+
+-r requirements.txt
+ruff==0.17.5
+coverage==7.17.3

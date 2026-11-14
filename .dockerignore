@@ -1,0 +1,17 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.egg-info
+.env
+.env.*
+data
+backups
+.terraform
+*.tfstate*
+*.tfvars
+*.tfplan
+tests
+docs
+infra
+.github
