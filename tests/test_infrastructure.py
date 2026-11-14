@@ -34,6 +34,7 @@ class InfrastructureTests(unittest.TestCase):
         self.assertIn("readinessProbe", container)
         volume = resources["PersistentVolume/argument-arena-data"]["spec"]
         self.assertEqual(volume["persistentVolumeReclaimPolicy"], "Retain")
+        self.assertEqual(volume["local"]["path"], "/usr/local/argument-arena")
         self.assertNotIn("hostPath", volume)
         self.assertEqual(
             volume["nodeAffinity"]["required"]["nodeSelectorTerms"][0]["matchExpressions"][0][
@@ -45,6 +46,23 @@ class InfrastructureTests(unittest.TestCase):
         self.assertFalse(
             any(r["kind"] in ("Service", "Ingress", "Secret") for r in resources.values())
         )
+
+    def test_kairos_storage_uses_persistent_host_filesystem_and_runtime_mount(self):
+        resources = self.resources(storage_path="/usr/local/apps/argument-arena")
+        volume = resources["PersistentVolume/argument-arena-data"]["spec"]
+        self.assertEqual(volume["local"]["path"], "/usr/local/apps/argument-arena")
+        container = resources["Deployment/bot"]["spec"]["template"]["spec"]["containers"][0]
+        mount = next(item for item in container["volumeMounts"] if item["name"] == "data")
+        self.assertEqual(mount["mountPath"], "/var/lib/argument-arena")
+        for path in (
+            "/var/lib/argument-arena",
+            "/tmp/argument-arena",
+            "/usr/local",
+            "/usr/local//",
+            "/usr/local/../var/lib/argument-arena",
+        ):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.resources(storage_path=path)
 
     def test_network_is_default_deny_with_dns_and_only_public_https_egress(self):
         resources = self.resources()

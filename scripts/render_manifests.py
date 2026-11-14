@@ -11,7 +11,7 @@ def render(
     image,
     guild_id,
     worker_name="demure",
-    storage_path="/var/lib/argument-arena",
+    storage_path="/usr/local/argument-arena",
     pull_secret="",
     llm_model="gpt-4.1-mini",
     llm_endpoint="https://api.openai.com/v1/chat/completions",
@@ -24,8 +24,8 @@ def render(
         raise ValueError("Provide a versioned image tag or digest.")
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", worker_name):
         raise ValueError("Invalid worker name.")
-    if not re.fullmatch(r"/var/[A-Za-z0-9/_-]+", storage_path):
-        raise ValueError("Use a persistent absolute directory under /var.")
+    if not re.fullmatch(r"/usr/local/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", storage_path):
+        raise ValueError("Use a persistent directory under /usr/local.")
     if pull_secret and not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", pull_secret):
         raise ValueError("Invalid registry Secret name.")
     if not re.fullmatch(r"[1-9][0-9]{0,19}", guild_id) or not int(guild_id) < 2**64:
@@ -62,7 +62,7 @@ def main():
     parser.add_argument("--image", required=True)
     parser.add_argument("--guild-id", required=True)
     parser.add_argument("--worker-name", default="demure")
-    parser.add_argument("--storage-path", default="/var/lib/argument-arena")
+    parser.add_argument("--storage-path", default="/usr/local/argument-arena")
     parser.add_argument("--pull-secret", default="")
     parser.add_argument("--llm-model", default="gpt-4.1-mini")
     parser.add_argument("--llm-endpoint", default="https://api.openai.com/v1/chat/completions")

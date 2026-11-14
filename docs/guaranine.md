@@ -41,13 +41,14 @@ Follow [Discord installation](getting-started.md) to enable Message Content Inte
 
 ## Prepare local storage and credentials
 
-Guaranine has no default storage provisioner. The retained local PersistentVolume is pinned to one worker. Create its backing directory on that worker using existing administrative access:
+Guaranine has no default storage provisioner. The retained local PersistentVolume is pinned to one worker. On the worker, create its backing directory on Kairos's persistent `/usr/local` filesystem using existing administrative access:
 
 ```bash
-sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/argument-arena
+sudo install -d -m 0700 -o 10001 -g 10001 /usr/local/argument-arena
+findmnt -T /usr/local/argument-arena
 ```
 
-Confirm that `/var/lib` persists on the Kairos worker. The database stays on that laptop when it disconnects; the bot resumes there and conservatively extends response clocks after downtime. Run one replica per database.
+Confirm that the backing filesystem is the persistent disk rather than an overlay or tmpfs. Kairos's `/var` overlay is temporary; the renderer and Terraform require host storage under `/usr/local`. The container still mounts the volume at `/var/lib/argument-arena`. The database stays on that laptop when it disconnects; the bot resumes there and conservatively extends response clocks after downtime. Run one replica per database.
 
 Create the namespace, then prepare private UTF-8 files containing only the relevant token/key, without shell assignments:
 

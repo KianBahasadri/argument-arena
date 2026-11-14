@@ -51,10 +51,10 @@ variable "worker_name" {
 
 variable "storage_path" {
   type    = string
-  default = "/var/lib/argument-arena"
+  default = "/usr/local/argument-arena"
   validation {
-    condition     = can(regex("^/var/[A-Za-z0-9/_-]+$", var.storage_path))
-    error_message = "Use a persistent absolute directory under /var."
+    condition     = can(regex("^/usr/local/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$", var.storage_path))
+    error_message = "Use a persistent directory under /usr/local."
   }
 }
 
