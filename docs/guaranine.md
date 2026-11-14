@@ -93,7 +93,7 @@ kubectl -n argument-arena get pods,pvc
 kubectl -n argument-arena logs deployment/bot --tail=100
 ```
 
-Use `llm_model` and `llm_endpoint` in the tfvars file to select another compatible model/provider. For a private image, `pull_secret` names an existing registry Secret. Startup and liveness use `argument-arena healthcheck --liveness`; readiness uses `argument-arena healthcheck` and waits for Discord readiness.
+Use `llm_model` and `llm_endpoint` in the tfvars file to select another compatible model/provider. For a private image, `pull_secret` names an existing registry Secret. Startup and liveness use `argument-arena healthcheck --liveness`; readiness uses `argument-arena healthcheck` and waits for Discord readiness. These are commands executed inside the container, with a five-second timeout and no HTTP endpoint. The health command reads the local heartbeat without loading the Discord runtime.
 
 Run `/diagnostic` in Discord, create the four match categories, and run `/setup`. Start a casual match with research and judging disabled for the initial infrastructure check, then deliberately verify configured AI features. See [commands](commands.md).
 

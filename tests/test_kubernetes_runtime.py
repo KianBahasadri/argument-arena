@@ -62,8 +62,28 @@ def test_rendered_probes_run_the_installed_cli_and_distinguish_readiness(tmp_pat
                     *command[1:],
                 ],
                 capture_output=True,
-                timeout=10,
+                timeout=container[name]["timeoutSeconds"],
                 check=False,
             )
             expected = 1 if name == "readinessProbe" and not ready else 0
             assert result.returncode == expected, result.stderr
+
+
+def test_healthcheck_runs_without_loading_the_gateway_runtime(tmp_path):
+    write_health(tmp_path, ready=True)
+    script = """
+import runpy
+import sys
+
+sys.modules["argument_arena.runtime"] = None
+sys.modules["discord"] = None
+sys.argv = ["argument-arena", "--data-dir", sys.argv[1], "healthcheck"]
+runpy.run_module("argument_arena", run_name="__main__")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path)],
+        capture_output=True,
+        timeout=deployment()["containers"][0]["readinessProbe"]["timeoutSeconds"],
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

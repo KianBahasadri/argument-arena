@@ -10,7 +10,6 @@ from argument_arena.config import Config
 from argument_arena.health import healthy
 from argument_arena.locking import process_lock
 from argument_arena.logging import configure_logging
-from argument_arena.runtime import run
 from argument_arena.storage import Storage, restore, snapshot
 
 
@@ -52,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
                 config.read_token()
                 logging.getLogger(__name__).info("configuration_valid")
             else:
+                # Health probes must not load the Discord client and product runtime.
+                from argument_arena.runtime import run
+
                 asyncio.run(run(config))
     except KeyboardInterrupt:
         return 130
