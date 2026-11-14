@@ -56,8 +56,7 @@ run "secure_runtime" {
       "AA_LOG_LEVEL=INFO",
       "AA_LLM_KEY_FILE=",
       "AA_SEARCH_KEY_FILE=",
-      "AA_LLM_MODEL=claude-haiku-5-5",
-      "AA_LLM_JUDGE_MODEL=gemini-4-argon",
+      "AA_LLM_MODEL=minimax-m3.1-flash",
       "AA_LLM_ENDPOINT=https://opencode.ai/inference/go/openai/v1/chat/completions",
     ]) && length(docker_container.bot.upload) == 0
     error_message = "Only non-secret configuration belongs in Terraform."
@@ -106,14 +105,13 @@ run "reject_incomplete_or_unsafe_inputs" {
 run "runtime_provider_configuration" {
   command = plan
   variables {
-    llm_enabled     = true
-    search_enabled  = true
-    llm_model       = "operator-model"
-    llm_judge_model = "operator-judge-model"
-    llm_endpoint    = "https://opencode.ai/inference/go/openai/v1/responses"
+    llm_enabled    = true
+    search_enabled = true
+    llm_model      = "operator-model"
+    llm_endpoint   = "https://opencode.ai/inference/go/openai/v1/responses"
   }
   assert {
-    condition     = contains(docker_container.bot.env, "AA_LLM_KEY_FILE=/run/secrets/llm-key") && contains(docker_container.bot.env, "AA_SEARCH_KEY_FILE=/run/secrets/search-key") && contains(docker_container.bot.env, "AA_LLM_MODEL=operator-model") && contains(docker_container.bot.env, "AA_LLM_JUDGE_MODEL=operator-judge-model")
+    condition     = contains(docker_container.bot.env, "AA_LLM_KEY_FILE=/run/secrets/llm-key") && contains(docker_container.bot.env, "AA_SEARCH_KEY_FILE=/run/secrets/search-key") && contains(docker_container.bot.env, "AA_LLM_MODEL=operator-model")
     error_message = "Providers must receive file references and non-secret runtime configuration."
   }
 }

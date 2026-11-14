@@ -5,8 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_LLM_MODEL = "claude-haiku-5-5"
-DEFAULT_LLM_JUDGE_MODEL = "gemini-4-argon"
+DEFAULT_LLM_MODEL = "minimax-m3.1-flash"
 DEFAULT_LLM_ENDPOINT = "https://opencode.ai/inference/go/openai/v1/chat/completions"
 GO_LLM_ENDPOINTS = frozenset(
     {
@@ -31,7 +30,6 @@ class Config:
     search_key_file: str | None = None
     llm_model: str = DEFAULT_LLM_MODEL
     llm_endpoint: str = DEFAULT_LLM_ENDPOINT
-    llm_judge_model: str = DEFAULT_LLM_JUDGE_MODEL
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Config":
@@ -52,10 +50,8 @@ class Config:
         if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ConfigurationError("AA_LOG_LEVEL must be a standard logging level")
         model = env.get("AA_LLM_MODEL", DEFAULT_LLM_MODEL)
-        judge_model = env.get("AA_LLM_JUDGE_MODEL", DEFAULT_LLM_JUDGE_MODEL)
-        for name, value in (("AA_LLM_MODEL", model), ("AA_LLM_JUDGE_MODEL", judge_model)):
-            if not value or len(value) > 100 or any(c.isspace() for c in value):
-                raise ConfigurationError(f"{name} must name a model")
+        if not model or len(model) > 100 or any(c.isspace() for c in model):
+            raise ConfigurationError("AA_LLM_MODEL must name a model")
         endpoint = env.get("AA_LLM_ENDPOINT", DEFAULT_LLM_ENDPOINT)
         if endpoint not in GO_LLM_ENDPOINTS:
             raise ConfigurationError(
@@ -71,7 +67,6 @@ class Config:
             env.get("AA_SEARCH_KEY_FILE") or None,
             model,
             endpoint,
-            judge_model,
         )
 
     def read_token(self) -> str:

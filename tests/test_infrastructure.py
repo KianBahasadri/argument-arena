@@ -99,7 +99,6 @@ class InfrastructureTests(unittest.TestCase):
                 renderer.render("bot:1", guild)
         for options in (
             {"llm_model": 'model"\n  invalid: true'},
-            {"llm_judge_model": 'model"\n  invalid: true'},
             {"llm_endpoint": "https://opencode.ai/inference/openai/v1/chat/completions"},
             {"llm_endpoint": "https://user:secret@example.com/chat"},
             {"llm_endpoint": "http://example.com/chat"},

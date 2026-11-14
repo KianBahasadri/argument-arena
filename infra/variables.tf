@@ -23,20 +23,11 @@ variable "guild_id" {
 }
 
 variable "llm_model" {
-  type    = string
-  default = "claude-haiku-5-5"
+  type        = string
+  default     = "minimax-m3.1-flash"
+  description = "Single OpenCode Go model for every LLM feature, including judging."
   validation {
     condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_model))
-    error_message = "Use a model identifier without whitespace or quotes."
-  }
-}
-
-variable "llm_judge_model" {
-  type        = string
-  default     = "gemini-4-argon"
-  description = "OpenCode Go model for judging when a match does not override it."
-  validation {
-    condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_judge_model))
     error_message = "Use a model identifier without whitespace or quotes."
   }
 }

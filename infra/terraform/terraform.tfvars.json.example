@@ -10,7 +10,6 @@
   "sync_commands": true,
   "llm_enabled": false,
   "search_enabled": false,
-  "llm_model": "claude-haiku-5-5",
-  "llm_judge_model": "gemini-4-argon",
+  "llm_model": "minimax-m3.1-flash",
   "llm_endpoint": "https://opencode.ai/inference/go/openai/v1/chat/completions"
 }

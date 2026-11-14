@@ -51,7 +51,7 @@ Participants can start a new match from any side discussion without ending or ch
 - Staff controls to pause, resume, cancel, close, or review a match and correct a recorded result.
 - A record of accepted settings, match events, moderator changes, and rating corrections.
 - Limits on concurrent matches, challenge frequency, research usage, and LLM spending, with clear status when a limit is reached.
-- OpenCode Go models for moderation, judging, training and research summaries; model selection is configurable.
+- MiniMax M3.1 Flash through OpenCode Go for moderation, judging, training and research summaries; one operator setting controls the model for all features.
 
 Server permissions, staff authority, service credentials, and server rules are administration settings. They are separate from optional match features that participants can toggle.
 

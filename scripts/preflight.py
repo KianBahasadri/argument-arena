@@ -34,7 +34,6 @@ def validate(values: dict[str, Any]) -> None:
             "llm_enabled",
             "search_enabled",
             "llm_model",
-            "llm_judge_model",
             "llm_endpoint",
         }
     ):
@@ -70,9 +69,8 @@ def validate(values: dict[str, Any]) -> None:
     for switch in ("llm_enabled", "search_enabled"):
         if type(values.get(switch, False)) is not bool:
             raise PreflightError(f"{switch} must be a boolean")
-    for name, default in (("llm_model", "claude-haiku-5-5"), ("llm_judge_model", "gemini-4-argon")):
-        if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", values.get(name, default)):
-            raise PreflightError(f"{name} must name a model without whitespace")
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", values.get("llm_model", "minimax-m3.1-flash")):
+        raise PreflightError("llm_model must name a model without whitespace")
     if values.get(
         "llm_endpoint", "https://opencode.ai/inference/go/openai/v1/chat/completions"
     ) not in {

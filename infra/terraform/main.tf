@@ -53,7 +53,6 @@ resource "docker_container" "bot" {
     "AA_LLM_KEY_FILE=${var.llm_enabled ? "/run/secrets/llm-key" : ""}",
     "AA_SEARCH_KEY_FILE=${var.search_enabled ? "/run/secrets/search-key" : ""}",
     "AA_LLM_MODEL=${var.llm_model}",
-    "AA_LLM_JUDGE_MODEL=${var.llm_judge_model}",
     "AA_LLM_ENDPOINT=${var.llm_endpoint}",
   ]
   mounts {

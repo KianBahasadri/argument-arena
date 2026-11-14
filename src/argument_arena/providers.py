@@ -24,7 +24,6 @@ from openai import APIError, AsyncOpenAI
 
 from argument_arena.config import (
     DEFAULT_LLM_ENDPOINT,
-    DEFAULT_LLM_JUDGE_MODEL,
     DEFAULT_LLM_MODEL,
     GO_LLM_ENDPOINTS,
 )
@@ -266,11 +265,12 @@ class OpenAI:
     model: str = DEFAULT_LLM_MODEL
     endpoint: str = DEFAULT_LLM_ENDPOINT
     http: HTTP | None = None
-    judge_model: str = DEFAULT_LLM_JUDGE_MODEL
 
     async def complete(self, task, data, model="default"):
         if self.endpoint not in GO_LLM_ENDPOINTS:
             raise ProviderError("unsupported_api_endpoint", retry=False)
+        if model not in {"default", self.model}:
+            raise ProviderError("model_not_enabled", retry=False)
         key = secret(self.key_file)
         if task not in TASKS:
             raise ProviderError("unknown_task", retry=False)
@@ -301,11 +301,9 @@ class OpenAI:
                     ),
                 ) as client,
             ):
-                default_model = self.judge_model if task == "judge" else self.model
-                selected = default_model if model == "default" else model
                 if suffix == "/responses":
                     response = await client.responses.create(
-                        model=selected,
+                        model=self.model,
                         input=messages,
                         text={"format": {"type": "json_object"}},
                         reasoning={"effort": "low"},
@@ -317,7 +315,7 @@ class OpenAI:
                     content = response.output_text
                 else:
                     response = await client.chat.completions.create(
-                        model=selected,
+                        model=self.model,
                         messages=messages,
                         response_format={"type": "json_object"},
                         reasoning_effort="low",
@@ -434,7 +432,6 @@ def configured_providers(config):
             config.llm_key_file,
             config.llm_model,
             config.llm_endpoint,
-            judge_model=config.llm_judge_model,
         ),
         Brave(config.search_key_file),
     )

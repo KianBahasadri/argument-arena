@@ -11,10 +11,9 @@ def render(
     image,
     guild_id,
     pull_secret="",
-    llm_model="claude-haiku-5-5",
+    llm_model="minimax-m3.1-flash",
     llm_endpoint="https://opencode.ai/inference/go/openai/v1/chat/completions",
     credentials_revision=1,
-    llm_judge_model="gemini-4-argon",
 ):
     pattern = (
         r"(?:[A-Za-z0-9._:-]+/)*[A-Za-z0-9._-]+"
@@ -28,9 +27,8 @@ def render(
         raise ValueError("Invalid registry Secret name.")
     if not re.fullmatch(r"[1-9][0-9]{0,19}", guild_id) or not int(guild_id) < 2**64:
         raise ValueError("Use a positive unsigned 64-bit Discord server ID.")
-    for model in (llm_model, llm_judge_model):
-        if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", model):
-            raise ValueError("Invalid model identifier.")
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", llm_model):
+        raise ValueError("Invalid model identifier.")
     if llm_endpoint not in {
         "https://opencode.ai/inference/go/openai/v1/chat/completions",
         "https://opencode.ai/inference/go/openai/v1/responses",
@@ -49,7 +47,6 @@ def render(
         "guild_id": guild_id,
         "pull_secret": pull_secret,
         "llm_model": llm_model,
-        "llm_judge_model": llm_judge_model,
         "llm_endpoint": llm_endpoint,
         "credentials_revision": str(credentials_revision),
     }.items():
@@ -64,8 +61,7 @@ def main():
     parser.add_argument("--image", required=True)
     parser.add_argument("--guild-id", required=True)
     parser.add_argument("--pull-secret", default="")
-    parser.add_argument("--llm-model", default="claude-haiku-5-5")
-    parser.add_argument("--llm-judge-model", default="gemini-4-argon")
+    parser.add_argument("--llm-model", default="minimax-m3.1-flash")
     parser.add_argument(
         "--llm-endpoint", default="https://opencode.ai/inference/go/openai/v1/chat/completions"
     )

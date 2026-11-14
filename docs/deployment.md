@@ -31,11 +31,10 @@ Copy `infra/terraform/terraform.tfvars.json.example` to ignored `infra/terraform
 | `sync_commands` | Synchronize this application's guild command list once per login, default `true` |
 | `llm_enabled` | Default `false`; when enabled, supplies only `/run/secrets/llm-key` as a runtime path |
 | `search_enabled` | Default `false`; when enabled, supplies only `/run/secrets/search-key` as a runtime path |
-| `llm_model` | Default `claude-haiku-5-5`; operator-selected model from the Go catalog |
-| `llm_judge_model` | Default `gemini-4-argon`; used when a match does not select a judging model |
-| `llm_endpoint` | Default OpenAI HTTPS Chat Completions endpoint; no credentials in URL |
+| `llm_model` | Default `minimax-m3.1-flash`; one Go model for all LLM features, including judging |
+| `llm_endpoint` | Default OpenCode Go Chat Completions endpoint; no credentials in URL |
 
-Build the selected platform with `docker buildx build --platform <selected-platform> --tag <chosen-registry-reference> --push .` from a reviewed checkout, or use an existing reviewed image publication process. The registry and tag are operator inputs; this repository does not publish images automatically. Record the resulting registry digest as `image`. Use external Docker registry authentication to pull that exact digest onto the selected daemon **before** preflight; do this for every new release. Terraform uses that preloaded image and has no registry credential configuration. Keep the previous digest available locally and in the registry for rollback. Do not use the local validation image tag for deployment.
+GitHub Actions publishes `ghcr.io/kianbahasadri/argument-arena:sha-<full-commit>` for `linux/amd64` after validation passes on main. Use the digest recorded in the successful publish job. For another platform, build from a reviewed checkout with `docker buildx build --platform <selected-platform> --tag <chosen-registry-reference> --push .`. Record the resulting registry digest as `image`. Use external Docker registry authentication to pull that exact digest onto the selected daemon **before** preflight; do this for every new release. Terraform uses that preloaded image and has no registry credential configuration. Keep the previous digest available locally and in the registry for rollback. Do not use the local validation image tag for deployment.
 
 For operator commands below, set these shell variables from the reviewed private inputs; their example values remain deliberately blank:
 

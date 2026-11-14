@@ -4,6 +4,8 @@ The six README phases are implemented in the existing Python bot. Start with [in
 
 ## Setup and negotiation
 
+All LLM features use the operator's single configured Go model, currently MiniMax M3.1 Flash. Model settings below accept `default` or that model's ID. Selecting a different model produces an unavailable assessment without sending a provider request; ordinary match management continues.
+
 `/setup` requires Administrator and selects four categories, optional announcement/results channels and a moderator role. `/settings server` displays the complete configuration; its optional `patch` JSON updates it with an execution-time Administrator check. `/settings audit` records server changes. Moderator roles can control matches and review results, but cannot configure server authority or credentials.
 
 Server defaults are materialized from `settings.py`. Initial limits are three open matches per member, a 60-second challenge cooldown, 100 research operations per UTC day, 200 LLM requests per UTC day and 100 LLM requests per match. A request has a bounded input and at most 3,000 completion tokens. These are request ceilings, not a dollar estimate; set lower limits for expensive models. Retries consume usage because an uncertain provider request may have been billed. Daily usage resets by UTC day; per-match allowances are lifetime totals. Source fetches are bounded by research depth plus up to five dispute links. Training shares the daily LLM allowance. No account or subscription is created by the bot.

@@ -2,9 +2,15 @@
 
 Evaluated November 14, 2026 for Argument Arena. OpenCode Go is a hard requirement; no pay-as-you-go Models or direct-provider endpoint was used in this evaluation.
 
-## Recommendation
+The operator selected **MiniMax M3.1 Flash** (`minimax-m3.1-flash`) as the single model for every LLM feature, including judging. Gemini 4 Argon, Kimi K3.1 Pro and GLM 5.3 are excluded from the deployment choice because of cost. The previous hybrid deployment plan was withdrawn. The measurements below retain all evaluated candidates as evidence, including those excluded from deployment.
 
-Use **Claude Haiku 5.5 for routine assistance** and **Gemini 4 Argon for judging**. Gemini has the strongest broader reasoning evidence among the accessible finalists and handled the judging recheck consistently. Haiku provides inexpensive routine analysis, although its judging recheck abstained despite a clear logical advantage. An explicitly accepted match model takes precedence over the judging default.
+## Selected deployment
+
+Use **MiniMax M3.1 Flash for every LLM feature**. It returned valid responses in all eight initial cases and four application-adapter rechecks, passed the earlier judging check and offers a low Go allowance-accounting rate. Set only `AA_LLM_MODEL=minimax-m3.1-flash`; server and match settings cannot override it with a different model. The earlier Haiku/Gemini split is superseded.
+
+DeepSeek V4.1 Flash is available in Go but remains blocked by this account's region settings, rather than a measured quality result. It can be evaluated later if the operator enables Global regions. No account settings were changed.
+
+After selection, eight fresh synthetic requests used the configured application provider, with the actual outbound model checked as `minimax-m3.1-flash` for every task. All eight returned valid JSON and Go billing with zero cash cost; the weighted checks were 91.0/100 with a 3.35-second mean. The judging case abstained despite a clear logical advantage, and the confounded-evidence case labeled the claim contradicted rather than insufficient. Keep validators and inconclusive outcomes active. This additional recheck is reported separately from the earlier comparison table and Pareto plot below.
 
 ## Five finalists
 
@@ -12,11 +18,11 @@ Input/output rates are USD per million tokens at the first context tier. These a
 
 | Model | Input / output | Weighted checks | Mean attempt | Broader intelligence index v5 | Role |
 | --- | --- | --- | --- | --- | --- |
-| Haiku 5.5 (`claude-haiku-5-5`) | $0.10 / $0.50 | 93.6/100 | 5.22s | 36 | Routine assistance and training; keep output validation |
-| Gemini 4 Argon (`gemini-4-argon`) | $2.00 / $10.00 | 98.1/100 | 8.10s | 50 | Strongest reasoning candidate; default judging |
-| GLM 5.3 (`glm-5.3`) | $1.40 / $4.40 | 95.5/100 | 2.94s | 32 | Fast alternative; highest nominal tariff among the fast options |
-| MiniMax M3.1 Flash (`minimax-m3.1-flash`) | $0.15 / $0.60 | 95.5/100 | 4.17s | 29 | Fast, inexpensive alternative |
-| Kimi K3.1 Pro (`kimi-k3.1-pro`) | $2.00 / $10.00 | 92.7/100 | 9.28s | 46 | Reasoning alternative; one adapter recheck timed out |
+| Haiku 5.5 (`claude-haiku-5-5`) | $0.10 / $0.50 | 93.6/100 | 5.22s | 36 | Budget comparison; judging recheck abstained |
+| Gemini 4 Argon (`gemini-4-argon`) | $2.00 / $10.00 | 98.1/100 | 8.10s | 50 | Excluded from deployment because of cost |
+| GLM 5.3 (`glm-5.3`) | $1.40 / $4.40 | 95.5/100 | 2.94s | 32 | Excluded from deployment because of cost |
+| MiniMax M3.1 Flash (`minimax-m3.1-flash`) | $0.15 / $0.60 | 95.5/100 | 4.17s | 29 | Selected for every LLM feature |
+| Kimi K3.1 Pro (`kimi-k3.1-pro`) | $2.00 / $10.00 | 92.7/100 | 9.28s | 46 | Excluded from deployment because of cost |
 
 Gemini's current $2/$10 rates include a 50% promotion through November 30, 2026; its published undiscounted rates are $4/$20. Haiku's first-tier rate applies through 100K input tokens. Our application input limit is 200,000 characters. Cached tokens have separate rates. Go plan quotas differ between Go, Go Plus and Go Teams.
 

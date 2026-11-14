@@ -5,7 +5,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from argument_arena.config import DEFAULT_LLM_ENDPOINT, Config, ConfigurationError
-from argument_arena.providers import HTTP, POLICY, Brave, OpenAI, ProviderError, public_addresses
+from argument_arena.providers import (
+    HTTP,
+    POLICY,
+    TASKS,
+    Brave,
+    OpenAI,
+    ProviderError,
+    public_addresses,
+)
 
 
 async def test_real_openai_adapter_runtime_secret_roles_endpoint_and_json(tmp_path):
@@ -37,9 +45,9 @@ async def test_real_openai_adapter_runtime_secret_roles_endpoint_and_json(tmp_pa
     )
     assert request["reasoning_effort"] == "low"
     key.write_text("rotated-key")
-    await provider.complete("analyze", {}, "accepted-judge-model")
+    await provider.complete("analyze", {}, "configured-model")
     assert http.request.call_args.args[1]["Authorization"] == "Bearer rotated-key"
-    assert json.loads(http.request.call_args.args[2])["model"] == "accepted-judge-model"
+    assert json.loads(http.request.call_args.args[2])["model"] == "configured-model"
 
 
 @pytest.mark.parametrize(
@@ -109,26 +117,36 @@ async def test_sdk_responses_api_uses_go_credentials_json_and_no_storage(tmp_pat
     assert request["max_output_tokens"] == 3000 and request["store"] is False
 
 
-async def test_judging_uses_its_configured_model_and_preserves_explicit_match_selection(tmp_path):
+@pytest.mark.parametrize("api", ["chat/completions", "responses"])
+async def test_all_features_use_the_single_configured_model(tmp_path, api):
     key = tmp_path / "key"
     key.write_text("offline-go-key")
     http = HTTP()
-    http.request = AsyncMock(
-        return_value={
-            "body": json.dumps(
-                {"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]}
-            ).encode()
-        }
+    payload = (
+        responses_payload("{}")
+        if api == "responses"
+        else {"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]}
     )
-    provider = OpenAI(str(key), model="routine-model", judge_model="judge-model", http=http)
-    for task, selection, expected in (
-        ("analyze", "default", "routine-model"),
-        ("judge", "default", "judge-model"),
-        ("judge", "accepted-match-model", "accepted-match-model"),
-    ):
-        await provider.complete(task, {}, selection)
-        request = json.loads(http.request.call_args.args[2])
-        assert request["model"] == expected
+    http.request = AsyncMock(return_value={"body": json.dumps(payload).encode()})
+    provider = OpenAI(
+        str(key), endpoint=f"https://opencode.ai/inference/go/openai/v1/{api}", http=http
+    )
+    for task in TASKS:
+        for selection in ("default", "minimax-m3.1-flash"):
+            await provider.complete(task, {}, selection)
+            request = json.loads(http.request.call_args.args[2])
+            assert request["model"] == "minimax-m3.1-flash"
+
+
+@pytest.mark.parametrize("task", ["analyze", "judge", "grade", "battle"])
+async def test_other_model_selections_are_unavailable_without_credentials_or_network(task):
+    http = HTTP()
+    http.request = AsyncMock()
+    provider = OpenAI(http=http)
+    with pytest.raises(ProviderError, match="model_not_enabled") as error:
+        await provider.complete(task, {}, "gemini-4-argon")
+    assert error.value.retry is False
+    http.request.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -320,7 +338,6 @@ async def test_unsafe_url_schemes_credentials_and_ports_are_rejected(url):
     "patch",
     [
         {"AA_LLM_MODEL": "bad model"},
-        {"AA_LLM_JUDGE_MODEL": "bad model"},
         {"AA_LLM_ENDPOINT": "http://example.org"},
         {"AA_LLM_ENDPOINT": "https://user:secret@example.org"},
     ],

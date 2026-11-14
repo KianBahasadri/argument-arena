@@ -8,7 +8,6 @@ locals {
     pull_secret          = var.pull_secret
     guild_id             = var.guild_id
     llm_model            = var.llm_model
-    llm_judge_model      = var.llm_judge_model
     llm_endpoint         = var.llm_endpoint
     credentials_revision = var.credentials_revision
   })) : yamldecode(document)]

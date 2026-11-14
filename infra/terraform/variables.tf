@@ -101,23 +101,12 @@ variable "search_enabled" {
 }
 
 variable "llm_model" {
-  description = "OpenCode Go model for analysis, research, training and judging."
+  description = "Single OpenCode Go model for every LLM feature, including judging."
   type        = string
-  default     = "claude-haiku-5-5"
+  default     = "minimax-m3.1-flash"
   nullable    = false
   validation {
     condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_model))
-    error_message = "Provide a model name without whitespace or credentials."
-  }
-}
-
-variable "llm_judge_model" {
-  description = "OpenCode Go model for judging when a match does not override it."
-  type        = string
-  default     = "gemini-4-argon"
-  nullable    = false
-  validation {
-    condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_judge_model))
     error_message = "Provide a model name without whitespace or credentials."
   }
 }
