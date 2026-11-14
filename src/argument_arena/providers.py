@@ -1,4 +1,4 @@
-"""Runtime-configured OpenAI JSON and Brave + HTTPS retrieval adapters.
+"""OpenCode JSON through the async OpenAI SDK, and Brave + HTTPS retrieval.
 
 Provider responses, messages and pages are untrusted data. Adapters expose no tools
 or actions to models. Network failures never become factual verdicts.
@@ -18,6 +18,18 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlencode, urljoin, urlsplit
+
+import httpx2
+from openai import APIError, AsyncOpenAI
+
+from argument_arena.config import (
+    DEFAULT_LLM_ENDPOINT,
+    DEFAULT_LLM_JUDGE_MODEL,
+    DEFAULT_LLM_MODEL,
+    GO_LLM_ENDPOINTS,
+)
+
+LLM_TIMEOUT = 25
 
 
 class ProviderError(RuntimeError):
@@ -128,8 +140,14 @@ class HTTP:
                     url = urljoin(url, response.getheader("Location", ""))
                     continue
                 if response.status >= 400:
+                    status = {
+                        401: "credential_rejected",
+                        402: "insufficient_balance",
+                        403: "access_denied",
+                        429: "rate_limited",
+                    }.get(response.status, "http_failed")
                     raise ProviderError(
-                        "rate_limited" if response.status == 429 else "http_failed",
+                        status,
                         retry=response.status in {408, 429} or response.status >= 500,
                     )
                 data = response.read(2_000_001)
@@ -140,6 +158,28 @@ class HTTP:
                 connection.close()
                 sock.close()
         raise ProviderError("too_many_redirects", retry=False)
+
+
+class SDKTransport(httpx2.AsyncBaseTransport):
+    """Keep DNS pinning, redirect refusal and response limits at the SDK boundary."""
+
+    def __init__(self, http):
+        self.http = http
+
+    async def handle_async_request(self, request):
+        headers = {name.title(): value for name, value in request.headers.items()}
+        # HTTP bounds the raw response; avoid decompressing a potentially unbounded body.
+        headers["Accept-Encoding"] = "identity"
+        response = await self.http.request(
+            str(request.url),
+            headers,
+            await request.aread(),
+        )
+        return httpx2.Response(
+            200,
+            content=response["body"],
+            headers={"Content-Type": "application/json"},
+        )
 
 
 POLICY = (
@@ -207,43 +247,97 @@ TASKS = {
 }
 
 
+def conversation_id(data, encoded):
+    for name, field in (("match", "id"), ("message", "match_id"), ("claim", "match")):
+        entry = data.get(name)
+        if isinstance(entry, dict) and entry.get(field):
+            context = str(entry[field])
+            break
+    else:
+        context = encoded
+    return "argument-arena-" + hashlib.sha256(context.encode()).hexdigest()[:32]
+
+
 @dataclass
 class OpenAI:
+    """OpenAI-compatible SDK adapter restricted to OpenCode Go."""
+
     key_file: str | None = None
-    model: str = "gpt-4.1-mini"
-    endpoint: str = "https://api.openai.com/v1/chat/completions"
+    model: str = DEFAULT_LLM_MODEL
+    endpoint: str = DEFAULT_LLM_ENDPOINT
     http: HTTP | None = None
+    judge_model: str = DEFAULT_LLM_JUDGE_MODEL
 
     async def complete(self, task, data, model="default"):
+        if self.endpoint not in GO_LLM_ENDPOINTS:
+            raise ProviderError("unsupported_api_endpoint", retry=False)
         key = secret(self.key_file)
         if task not in TASKS:
             raise ProviderError("unknown_task", retry=False)
         encoded = json.dumps(data, allow_nan=False)
         if len(encoded) > 200000:
             raise ProviderError("input_limit_exceeded", retry=False)
-        request = {
-            "model": self.model if model == "default" else model,
-            "messages": [
-                {"role": "system", "content": POLICY + TASKS[task]},
-                {"role": "user", "content": encoded},
-            ],
-            "response_format": {"type": "json_object"},
-            "max_completion_tokens": 3000,
-        }
-        response = await (self.http or HTTP()).request(
-            self.endpoint,
-            {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json.dumps(request).encode(),
-        )
+        suffix = "/responses" if self.endpoint.endswith("/responses") else "/chat/completions"
+        messages = [
+            {"role": "system", "content": POLICY + TASKS[task]},
+            {"role": "user", "content": encoded},
+        ]
         try:
-            choice = json.loads(response["body"])["choices"][0]
-            if choice["finish_reason"] != "stop":
-                raise ValueError
-            result = json.loads(choice["message"]["content"])
+            async with (
+                asyncio.timeout(LLM_TIMEOUT),
+                AsyncOpenAI(
+                    api_key=key,
+                    base_url=self.endpoint.removesuffix(suffix),
+                    max_retries=0,
+                    timeout=20,
+                    default_headers={
+                        "User-Agent": "ArgumentArena/0.2.0",
+                        "x-opencode-session": conversation_id(data, encoded),
+                    },
+                    http_client=httpx2.AsyncClient(
+                        transport=SDKTransport(self.http or HTTP()),
+                        trust_env=False,
+                        follow_redirects=False,
+                    ),
+                ) as client,
+            ):
+                default_model = self.judge_model if task == "judge" else self.model
+                selected = default_model if model == "default" else model
+                if suffix == "/responses":
+                    response = await client.responses.create(
+                        model=selected,
+                        input=messages,
+                        text={"format": {"type": "json_object"}},
+                        reasoning={"effort": "low"},
+                        max_output_tokens=3000,
+                        store=False,
+                    )
+                    if response.status != "completed":
+                        raise ValueError
+                    content = response.output_text
+                else:
+                    response = await client.chat.completions.create(
+                        model=selected,
+                        messages=messages,
+                        response_format={"type": "json_object"},
+                        reasoning_effort="low",
+                        max_completion_tokens=3000,
+                    )
+                    choice = response.choices[0]
+                    if choice.finish_reason != "stop":
+                        raise ValueError
+                    content = choice.message.content
+            result = json.loads(content)
             if not isinstance(result, dict):
                 raise ValueError
             return result
-        except (ValueError, KeyError, IndexError, TypeError):
+        except APIError as error:
+            if isinstance(error.__cause__, ProviderError):
+                raise error.__cause__ from None
+            raise ProviderError("network_failed") from None
+        except TimeoutError:
+            raise ProviderError("network_failed") from None
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
             raise ProviderError("invalid_model_response") from None
 
 
@@ -336,6 +430,11 @@ class Brave:
 
 def configured_providers(config):
     return (
-        OpenAI(config.llm_key_file, config.llm_model, config.llm_endpoint),
+        OpenAI(
+            config.llm_key_file,
+            config.llm_model,
+            config.llm_endpoint,
+            judge_model=config.llm_judge_model,
+        ),
         Brave(config.search_key_file),
     )

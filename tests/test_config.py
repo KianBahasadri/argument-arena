@@ -84,3 +84,5 @@ def test_json_logs_redact_token_urls_and_exception_contents():
     assert "other secret data" not in output
     configure_logging("DEBUG", secrets=(secret,))
     assert logging.getLogger("discord.http").getEffectiveLevel() >= logging.WARNING
+    for name in ("openai", "httpx2", "httpcore2"):
+        assert logging.getLogger(name).getEffectiveLevel() >= logging.WARNING

@@ -1,6 +1,6 @@
 # Argument Arena Privacy Policy
 
-Effective date: November 13, 2026
+Effective date: November 14, 2026
 
 Argument Arena is a Discord bot for organized debates, research, judging, reasoning practice and optional user profiles. This policy describes the official bot operated by the maintainer of [KianBahasadri/argument-arena](https://github.com/KianBahasadri/argument-arena) ("we", "us" or the "operator"). Independently hosted copies have their own operators and must provide their own privacy information.
 
@@ -39,13 +39,13 @@ We do not sell personal information, share it for advertising, or use Discord me
 
 **Private features and administrators.** Slash-command responses and training are normally visible only to the requesting member. Configured private coaching or feedback is sent by direct message. Profiles default to private; choosing public visibility makes them accessible to other members through the bot. Enabling training inclusion can add practice history to a profile. Application-level privacy controls do not prevent the bot operator or authorized infrastructure administrators from accessing the underlying database when needed for support, maintenance or requests.
 
-**AI providers.** Enabled analysis, research summaries, judging and training grading can send relevant message text, transcript context, topics, positions, claims, source excerpts, answers and Discord identifiers or links to the operator's configured AI provider. The default integration uses OpenAI's API; a compatible provider can be configured instead. Profile analysis being off does not turn off separately enabled match assistance or training grading.
+**AI providers.** Enabled analysis, research summaries, judging and training grading can send relevant message text, transcript context, topics, positions, claims, source excerpts, answers and Discord identifiers or links to the operator's configured AI provider. The integration uses OpenCode Go, which routes requests to the selected model provider. The operator must select models whose processing terms are consistent with this policy, including the restriction on using Discord content for model training. Profile analysis being off does not turn off separately enabled match assistance or training grading.
 
 **Search providers and source websites.** Research sends queries derived from claims to Brave Search API and retrieves public source URLs. A query or URL may contain information included in a claim or submitted link. Source websites receive ordinary request information, including the requested URL and the bot server's IP address.
 
 **Service providers and legal obligations.** Hosting, backup and security providers may process data on the operator's behalf. We may also disclose information where required by law, consistent with Discord's rules and applicable law. Providers must be used under arrangements consistent with those rules, including restrictions on secondary use of Discord data.
 
-Provider retention and processing depend on the selected service and account configuration; there is no promise of zero retention. See [OpenAI's business-data information](https://openai.com/enterprise-privacy/), [Brave Search API's privacy notice](https://api-dashboard.search.brave.com/privacy-policy) and [Discord's privacy policy](https://discord.com/privacy). GitHub hosts these documents and public support issues under its [privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement). Contact the operator to identify the providers and processing locations used by your installation.
+Provider retention and processing depend on the selected service and account configuration; there is no promise of zero retention. See [OpenCode Go's model-specific processing information](https://opencode.ai/docs/console/go/#privacy), [OpenAI's business-data information](https://openai.com/enterprise-privacy/), [Brave Search API's privacy notice](https://api-dashboard.search.brave.com/privacy-policy) and [Discord's privacy policy](https://discord.com/privacy). GitHub hosts these documents and public support issues under its [privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement). Contact the operator to identify the providers and processing locations used by your installation.
 
 ## Storage, retention and deletion
 

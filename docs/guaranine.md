@@ -37,7 +37,7 @@ GHCR packages start private, even for a public source repository. For anonymous 
 
 If the package was initially uploaded manually, check its settings to ensure it is linked to `KianBahasadri/argument-arena` and grants that repository's Actions write access. The publisher's OCI source label establishes this link for new packages. See [GitHub's registry authentication and package access documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
-Follow [Discord installation](getting-started.md) to enable Message Content Intent and install the bot with Administrator permission. Copy the server ID for the required `guild_id` input. LLM assistance uses an OpenAI-compatible provider; research uses Brave Search and independently retrieved HTTPS pages. Missing provider files produce an unavailable assessment without preventing match management.
+Follow [Discord installation](getting-started.md) to enable Message Content Intent and install the bot with Administrator permission. Copy the server ID for the required `guild_id` input. LLM assistance uses OpenCode Go exclusively; research uses Brave Search and independently retrieved HTTPS pages. Missing provider files produce an unavailable assessment without preventing match management.
 
 ## Check storage and prepare credentials
 
@@ -58,7 +58,7 @@ mkdir -p .secrets
 ${EDITOR:-nano} .secrets/discord-token
 ```
 
-For AI features, create `llm-key` and `search-key` in the same private directory. Terraform includes those files when present. It creates the namespace first, then the Secret, then the remaining application resources. Do not create those resources manually before applying Terraform.
+For AI assistance, save your OpenCode Go API key in `.secrets/llm-key`. Research also needs a Brave Search API key in `.secrets/search-key`. Terraform includes those files when present. It creates the namespace first, then the Secret, then the remaining application resources. Do not create those resources manually before applying Terraform.
 
 The deployment mounts this Secret read-only at `/run/secrets`. UID/GID 10001 reads the files using the pod's filesystem group. Terraform uses the provider's write-only `data_wo` field, keeping secret values out of saved plans and state; the pinned provider also skips reading them back into state. This requires Terraform 1.11 or newer; the repository pins 1.13.5. Secret values never enter the rendered application manifest. Guaranine encrypts Kubernetes Secrets at rest. See the [pinned provider implementation](https://github.com/hashicorp/terraform-provider-kubernetes/blob/v2.38.0/kubernetes/resource_kubernetes_secret_v1.go).
 
@@ -93,7 +93,7 @@ kubectl -n argument-arena get pods,pvc
 kubectl -n argument-arena logs deployment/bot --tail=100
 ```
 
-Use `llm_model` and `llm_endpoint` in the tfvars file to select another compatible model/provider. For a private image, `pull_secret` names an existing registry Secret. Startup and liveness use `argument-arena healthcheck --liveness`; readiness uses `argument-arena healthcheck` and waits for Discord readiness. These are commands executed inside the container, with a five-second timeout and no HTTP endpoint. The health command reads the local heartbeat without loading the Discord runtime.
+Use `llm_model` for routine assistance and `llm_judge_model` for judging; both must name models from the OpenCode Go catalog. Defaults are Claude Haiku 5.5 and Gemini 4 Argon respectively. An explicitly accepted match model overrides the judging default. `llm_endpoint` accepts only Go Chat Completions or Responses URLs; the application and both Terraform targets reject other providers and the pay-as-you-go Models route. For a private image, `pull_secret` names an existing registry Secret. Startup and liveness use `argument-arena healthcheck --liveness`; readiness uses `argument-arena healthcheck` and waits for Discord readiness. These are commands executed inside the container, with a five-second timeout and no HTTP endpoint. The health command reads the local heartbeat without loading the Discord runtime.
 
 Run `/diagnostic` in Discord, create the four match categories, and run `/setup`. Start a casual match with research and judging disabled for the initial infrastructure check, then deliberately verify configured AI features. See [commands](commands.md).
 

@@ -41,3 +41,6 @@ def configure_logging(level: str = "INFO", *, secrets: tuple[str, ...] = ()) -> 
     logging.getLogger("aiohttp").setLevel(logging.WARNING)
     logging.getLogger("aiosqlite").setLevel(logging.WARNING)
     logging.getLogger("filelock").setLevel(logging.WARNING)
+    logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
+    logging.getLogger("httpcore2").setLevel(logging.WARNING)

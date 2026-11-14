@@ -29,6 +29,9 @@ def test_kubernetes_environment_and_secret_mount_match_installed_runtime(tmp_pat
     env = {item["name"]: item["value"] for item in container["env"]}
     config = Config.from_env(env)
     assert config.guild_id == 123
+    assert config.llm_endpoint.startswith("https://opencode.ai/inference/go/")
+    assert config.llm_model == "claude-haiku-5-5"
+    assert config.llm_judge_model == "gemini-4-argon"
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     assert Path(mounts["data"]["mountPath"]) == config.data_dir
     assert mounts["credentials"]["readOnly"]

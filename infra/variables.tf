@@ -24,19 +24,29 @@ variable "guild_id" {
 
 variable "llm_model" {
   type    = string
-  default = "gpt-4.1-mini"
+  default = "claude-haiku-5-5"
   validation {
     condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_model))
     error_message = "Use a model identifier without whitespace or quotes."
   }
 }
 
+variable "llm_judge_model" {
+  type        = string
+  default     = "gemini-4-argon"
+  description = "OpenCode Go model for judging when a match does not override it."
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_judge_model))
+    error_message = "Use a model identifier without whitespace or quotes."
+  }
+}
+
 variable "llm_endpoint" {
   type    = string
-  default = "https://api.openai.com/v1/chat/completions"
+  default = "https://opencode.ai/inference/go/openai/v1/chat/completions"
   validation {
-    condition     = can(regex("^https://[A-Za-z0-9.-]+(:443)?/[A-Za-z0-9_./-]+$", var.llm_endpoint))
-    error_message = "Use an HTTPS API URL without credentials, query parameters or fragments."
+    condition     = contains(["https://opencode.ai/inference/go/openai/v1/chat/completions", "https://opencode.ai/inference/go/openai/v1/responses"], var.llm_endpoint)
+    error_message = "Use an OpenCode Go Chat Completions or Responses endpoint."
   }
 }
 

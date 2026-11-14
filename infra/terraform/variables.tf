@@ -101,9 +101,9 @@ variable "search_enabled" {
 }
 
 variable "llm_model" {
-  description = "Default OpenAI-compatible model for analysis, research, training and judging."
+  description = "OpenCode Go model for analysis, research, training and judging."
   type        = string
-  default     = "gpt-4.1-mini"
+  default     = "claude-haiku-5-5"
   nullable    = false
   validation {
     condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_model))
@@ -111,13 +111,24 @@ variable "llm_model" {
   }
 }
 
-variable "llm_endpoint" {
-  description = "HTTPS OpenAI-compatible Chat Completions endpoint, with no credentials in the URL."
+variable "llm_judge_model" {
+  description = "OpenCode Go model for judging when a match does not override it."
   type        = string
-  default     = "https://api.openai.com/v1/chat/completions"
+  default     = "gemini-4-argon"
   nullable    = false
   validation {
-    condition     = can(regex("^https://[A-Za-z0-9.-]+(:443)?/[A-Za-z0-9_./-]+$", var.llm_endpoint))
-    error_message = "Use an HTTPS API endpoint without credentials, fragments or query parameters."
+    condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_judge_model))
+    error_message = "Provide a model name without whitespace or credentials."
+  }
+}
+
+variable "llm_endpoint" {
+  description = "OpenCode Go Chat Completions or Responses endpoint; no other provider or billing route."
+  type        = string
+  default     = "https://opencode.ai/inference/go/openai/v1/chat/completions"
+  nullable    = false
+  validation {
+    condition     = contains(["https://opencode.ai/inference/go/openai/v1/chat/completions", "https://opencode.ai/inference/go/openai/v1/responses"], var.llm_endpoint)
+    error_message = "Use an OpenCode Go Chat Completions or Responses endpoint."
   }
 }

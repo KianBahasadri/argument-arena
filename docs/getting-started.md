@@ -52,8 +52,9 @@ argument-arena run
 | `AA_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` | `INFO` |
 | `AA_LLM_KEY_FILE` | Runtime file holding the raw OpenAI-compatible API key | Empty: LLM features report unavailable |
 | `AA_SEARCH_KEY_FILE` | Runtime file holding a Brave Web Search subscription token | Empty: research reports unavailable |
-| `AA_LLM_MODEL` | Default model for moderation, judging, training and research summaries | `gpt-4.1-mini` |
-| `AA_LLM_ENDPOINT` | HTTPS Chat Completions API URL, without URL credentials | `https://api.openai.com/v1/chat/completions` |
+| `AA_LLM_MODEL` | Default model for moderation, training and research summaries | `claude-haiku-5-5` |
+| `AA_LLM_JUDGE_MODEL` | Default judging model when the match does not select one explicitly | `gemini-4-argon` |
+| `AA_LLM_ENDPOINT` | OpenCode Go Chat Completions or Responses API URL | `https://opencode.ai/inference/go/openai/v1/chat/completions` |
 
 The environment is the configuration interface; `.env` is loaded by the shell, not automatically by the package. `--data-dir PATH` is a global option for offline maintenance and health probes, placed before the subcommand. Running the bot always uses `AA_DATA_DIR`.
 

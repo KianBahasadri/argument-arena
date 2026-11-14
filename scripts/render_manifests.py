@@ -11,9 +11,10 @@ def render(
     image,
     guild_id,
     pull_secret="",
-    llm_model="gpt-4.1-mini",
-    llm_endpoint="https://api.openai.com/v1/chat/completions",
+    llm_model="claude-haiku-5-5",
+    llm_endpoint="https://opencode.ai/inference/go/openai/v1/chat/completions",
     credentials_revision=1,
+    llm_judge_model="gemini-4-argon",
 ):
     pattern = (
         r"(?:[A-Za-z0-9._:-]+/)*[A-Za-z0-9._-]+"
@@ -27,10 +28,14 @@ def render(
         raise ValueError("Invalid registry Secret name.")
     if not re.fullmatch(r"[1-9][0-9]{0,19}", guild_id) or not int(guild_id) < 2**64:
         raise ValueError("Use a positive unsigned 64-bit Discord server ID.")
-    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", llm_model):
-        raise ValueError("Invalid model identifier.")
-    if not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::443)?/[A-Za-z0-9_./-]+", llm_endpoint):
-        raise ValueError("Use an HTTPS API URL without credentials, query parameters or fragments.")
+    for model in (llm_model, llm_judge_model):
+        if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", model):
+            raise ValueError("Invalid model identifier.")
+    if llm_endpoint not in {
+        "https://opencode.ai/inference/go/openai/v1/chat/completions",
+        "https://opencode.ai/inference/go/openai/v1/responses",
+    }:
+        raise ValueError("Use an OpenCode Go Chat Completions or Responses endpoint.")
     source = Path(__file__).resolve().parents[1] / "infra/resources.yaml.tftpl"
     template = source.read_text()
     template = re.sub(
@@ -44,6 +49,7 @@ def render(
         "guild_id": guild_id,
         "pull_secret": pull_secret,
         "llm_model": llm_model,
+        "llm_judge_model": llm_judge_model,
         "llm_endpoint": llm_endpoint,
         "credentials_revision": str(credentials_revision),
     }.items():
@@ -58,8 +64,11 @@ def main():
     parser.add_argument("--image", required=True)
     parser.add_argument("--guild-id", required=True)
     parser.add_argument("--pull-secret", default="")
-    parser.add_argument("--llm-model", default="gpt-4.1-mini")
-    parser.add_argument("--llm-endpoint", default="https://api.openai.com/v1/chat/completions")
+    parser.add_argument("--llm-model", default="claude-haiku-5-5")
+    parser.add_argument("--llm-judge-model", default="gemini-4-argon")
+    parser.add_argument(
+        "--llm-endpoint", default="https://opencode.ai/inference/go/openai/v1/chat/completions"
+    )
     parser.add_argument("--credentials-revision", type=int, default=1)
     args = parser.parse_args()
     try:

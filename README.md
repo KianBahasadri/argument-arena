@@ -51,7 +51,7 @@ Participants can start a new match from any side discussion without ending or ch
 - Staff controls to pause, resume, cancel, close, or review a match and correct a recorded result.
 - A record of accepted settings, match events, moderator changes, and rating corrections.
 - Limits on concurrent matches, challenge frequency, research usage, and LLM spending, with clear status when a limit is reached.
-- Configurable LLM provider and model for moderation, judging, training, and research summaries; provider choice remains open.
+- OpenCode Go models for moderation, judging, training and research summaries; model selection is configurable.
 
 Server permissions, staff authority, service credentials, and server rules are administration settings. They are separate from optional match features that participants can toggle.
 
@@ -291,7 +291,7 @@ Read-only spectators should still be able to invoke permitted application comman
 - [x] **Training:** Logically Fallacious references, focused drills, mixed puzzles, bot battles, explanations, and progress tracking.
 - [x] **Profiles:** topic interests, positions argued, argument tendencies, evidence links, user controls, and personalized practice recommendations.
 
-The technical foundation uses Python 3.12 with discord.py, a single process, and durable SQLite storage. Terraform defines a portable container deployment on the owner's existing server; a [declarative host adapter contract](docs/host-adapter.md) keeps OS-specific setup pending the deliberately unspecified server inputs. All product phases above are implemented. OpenAI-compatible JSON Chat Completions and Brave search with HTTPS retrieval are configurable runtime integrations; absent keys produce explicit unavailable states. See the [feature checklist](docs/feature-checklist.md).
+The technical foundation uses Python 3.12 with discord.py, a single process, and durable SQLite storage. Terraform defines a portable container deployment on the owner's existing server; a [declarative host adapter contract](docs/host-adapter.md) keeps OS-specific setup pending the deliberately unspecified server inputs. All product phases above are implemented. OpenCode Go through an async OpenAI-compatible SDK and Brave search with HTTPS retrieval are configurable runtime integrations; absent keys produce explicit unavailable states. See the [feature checklist](docs/feature-checklist.md).
 
 ## Development validation
 

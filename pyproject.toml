@@ -12,6 +12,8 @@ dependencies = [
   "discord.py==2.7.1",
   "aiosqlite==0.22.1",
   "filelock==3.20.3",
+  "httpx2==2.16.0",
+  "openai==3.51.0",
 ]
 
 [project.optional-dependencies]
