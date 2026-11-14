@@ -1,34 +1,48 @@
-# Architecture and validation
+# Runtime and extension contracts
 
-The runtime is one Python asyncio process using discord.py and aiohttp. SQLite stores matches, messages, claims and their revisions, audit events, results, ratings, user preferences, training sessions, durable jobs and delivery state. Records are JSON documents within a transactional table; SQLite WAL and full synchronization preserve committed writes. `Store.atomic()` supports nested transactions. The image contains no credentials.
+## Layout
 
-| Module | Responsibility |
-| --- | --- |
-| `core.py` | Match rules, mutual consent, turns, clocks, results and replayable Elo |
-| `store.py` | Transactional persistence and online backups |
-| `bot.py` | Discord commands, persistent buttons, permissions, delivery/recovery and background work |
-| `intelligence.py` | Analysis, research, budgets and validated structured judging |
-| `providers.py` | Bounded provider HTTP and public evidence retrieval |
-| `training.py`, `fallacies.json` | Original exercises, grading, battles and practice history |
-| `profiles.py` | Consent, evidence-linked profiles, corrections and removal |
-| `config.py` | Environment configuration |
+- `src/argument_arena/config.py`: non-secret environment settings and file-only token loading.
+- `client.py`, `commands.py`: guild-restricted Gateway, slash commands, ephemeral responses and settings UI.
+- `settings.py`, `arena.py`: validated policy, authorization and transactional match state machine.
+- `repository.py`, `worker.py`: durable units of work, unique leased jobs and supervised scheduling.
+- `assistance.py`, `providers.py`: grounded claim graphs, evidence histories, JSON LLM/search adapters and judging.
+- `competition.py`: deterministic Elo replay and filtered records.
+- `curriculum.py`, `training.py`, `profiles.py`: original drills, grading/progress and consent-controlled observations.
+- `discord_gateway.py`: explicit permission policy, channel creation/moves, history recovery and delivery acknowledgement.
+- `runtime.py`, `health.py`, `locking.py`, `logging.py`: lifecycle, local health probes, exclusive installation lock, and JSON output.
+- `storage.py`: asynchronous SQLite unit of work, versioned migrations, namespaced JSON settings, snapshot, and restore.
+- `infra/terraform`: existing Docker daemon deployment; no cloud or host provisioning.
+- `infra/`: Guaranine Kubernetes resources, sharing the same installed package and image.
 
-The domain engine contains no Discord calls. The adapter performs permission checks, records accepted state, and reconciles external Discord operations. A deterministic channel topic identifies channel creation that succeeded before a process crash. Persisted jobs resume after restarts. Delivery to external Discord APIs is at least once; a crash immediately after a successful send can duplicate a notification. Match results and rating updates are transactional and idempotent.
+One process owns one local-disk Docker volume. SQLite uses WAL, foreign keys, a five-second busy timeout, and serialized application transactions through `aiosqlite`. The bot acquires `bot.lock` before opening the database and holds it through shutdown. Maintenance commands acquire the same lock. Store this directory on a local filesystem supporting reliable OS file locks and SQLite WAL; NFS/shared network filesystems and multi-replica deployment are outside this architecture.
 
-Official transcripts include only the two participants' text in the main match channel. Discussion-thread messages and reactions are excluded. Message edits and deletions invalidate prior claim checks. LLM results are validated before storage: quoted claims must occur in the original message, source quotations must occur in inspected pages, and judging references must identify official messages. Scores and winners are computed from the agreed rubric rather than trusting a model-supplied winner.
+The data directory contains `arena.sqlite3`, its SQLite WAL/SHM files when active, `bot.lock`, and `health.json`. It contains no token. Keep it stable across restarts and image replacements. Docker initializes a new named volume from the image's directory with UID/GID 10001 ownership; restore the same ownership when importing data. The image root is read-only in deployment, `/tmp` is a bounded tmpfs, all capabilities are dropped, and no ports are exposed.
 
-Training puzzles in `fallacies.json` are original examples with links crediting Logically Fallacious reference entries. Live grading checks reasoning separately from identification; a correct label alone does not establish mastery. Practice is separate from ranked human matches. Missing provider configuration produces an explicit unavailable assessment.
+## Persistence API for dependent features
 
-## Development checks
+The runtime opens `Storage` before constructing `ArenaClient`, available as `client.storage` for feature handlers. `get(namespace, key, default=None)` and `put(namespace, key, JSON_value)` provide a durable, namespaced JSON settings interface. For example, a future server setting can use namespace `guild:<snowflake>` without sharing keys with another domain. Product tables use the same unit of work; `documents` stores versioned domain JSON, including guild policy and profile consent, separately from the foundation settings namespace.
 
-Use Python 3.12, install `requirements-dev.txt`, and run `bash scripts/validate.sh`. The same entry point runs in the required `Clusterfork validation` CI job. It checks Markdown, Python lint, deterministic unit/integration tests, infrastructure policy invariants, and Python compilation. The runtime dependencies and their transitive versions are pinned in `requirements.txt`.
+Use `async with storage.transaction() as db:` for atomic feature writes and parameterized `await db.execute(sql, parameters)` statements. Exceptions, including cancellation, roll back the transaction. Transactions serialize on one async lock; do not nest them, call `get`/`put` inside them, call `executescript` (it can commit implicitly), or hold a transaction across Discord/provider requests. Outside transactions, use the settings methods; raw `connection` access is reserved for schema work/tests. Schema-specific repositories should use the same transaction interface as they are introduced. Persist Discord IDs as text in product tables to retain the full unsigned snowflake range.
 
-For infrastructure changes also run:
+Append `Migration(next_version, "descriptive_name", (sql_statement, ...))` to `MIGRATIONS`. Versions start at 1 and remain contiguous. Applied version/name/SQL checksum tuples are recorded in `schema_migrations`; never rewrite an applied migration. All pending statements and migration records commit atomically at startup or `argument-arena migrate`. A failed migration rolls back, and a changed, missing, or unknown migration prevents startup. Add offline tests for each feature migration and its failure paths. Prefer additive changes; use an expand/migrate/contract sequence before removing fields used by an older image.
 
-```bash
-terraform -chdir=infra init -backend=false
-terraform -chdir=infra fmt -check
-terraform -chdir=infra validate
-```
+`argument-arena --data-dir PATH backup DESTINATION` uses SQLite's backup API, includes WAL contents, checks integrity, and refuses to overwrite a snapshot. `restore SOURCE` stages a snapshot, validates integrity and migration compatibility, applies supported pending migrations, and atomically replaces the stopped database. Both CLI commands require the bot to be stopped and hold the lock. Retain snapshots outside the bot's state volume. Never copy only `arena.sqlite3` while it is open. The [operator procedure](deployment.md#backup-and-restore) covers container mounts and safe rollback.
 
-Tests substitute provider transports and Discord objects. They do not send Discord messages, spend API credits, publish images or mutate a cluster. A real rollout and test-server smoke check are still required to verify permissions, enabled gateway intents, registry access, local-volume provisioning and provider account behavior. The [deployment guide](deployment.md) explains those operator steps.
+## Adding commands and services
+
+Register new commands in the command tree during client construction or `setup_hook`, then synchronize once during login. Do not register, migrate, or create background jobs in `on_ready`; it repeats after reconnects. The durable worker runs under the existing runtime supervisor; fatal failures close the process and shutdown cancels it. Use the configured guild guard and add explicit authorization for every mutating command. Product services enforce participant, staff and Administrator authority at execution. Profile visibility also applies to staff. See [commands](commands.md).
+
+Use `discord.AllowedMentions.none()` unless a feature explicitly needs controlled mentions. Interaction errors use ephemeral generic messages and constant log events. New provider secrets must follow the same external-file mounting pattern as the Discord token; their values must never enter Terraform, image arguments, committed configuration, settings tables, or logs. Runtime providers are OpenAI-compatible JSON Chat Completions and Brave Web Search plus bounded HTTPS retrieval, configured by non-secret environment values and optional mounted key files. Provider calls are protocols injected in tests; no service I/O occurs inside a transaction.
+
+Python runtime dependencies are pinned directly in `pyproject.toml` and transitively with SHA-256 hashes in `requirements.txt`; build tools and development dependencies have separate hash locks. The container pins Python's multi-platform base index by digest. Terraform pins its Docker provider exactly and commits official provider checksums for common Linux, macOS, and Windows operator platforms. These are input/build locks, not a claim that rebuilt OCI metadata is byte-for-byte identical across different builder engines.
+
+## Product persistence and recovery
+
+Migration 2 adds additive `documents`, `matches`, `events`, `messages`, immutable `message_versions`, `claims`, `jobs`, `results`, `rating_changes`, `usage` and `training` tables. Migration 1 remains unchanged. Product SQL lives behind `Repository`/`Unit`; JSON serialization rejects nonfinite values. Snowflakes remain text. Accepted settings, rating policy, confirmations, speaker/deadline, pauses, negotiated actions, audience votes and transcript version are one aggregate saved atomically with events/jobs.
+
+Claim IDs include message/revision/index; edits mark old claims stale rather than rewriting their source. Research check histories retain sources, verdict revisions and disputes. Jobs have unique keys, states, due times, expiring leases, attempts and safe failure codes. Waiting for evidence releases the lease without consuming provider retries. Running jobs become reclaimable after 180 seconds; the single-process lock prevents competing workers. Side effects occur outside transactions, followed by durable acknowledgement. Discord create/delivery markers recover uncertain successes. Results have a unique match key; rating replay is atomic with result changes.
+
+A worker heartbeat is persisted separately from local process health. Unobserved/disconnected intervals extend live response deadlines conservatively. On readiness/reconnect, channel history is reconciled before forfeits are enabled. Paused/judging transcripts are also checked for edits/deletions. See [clock and outcome policy](product.md#channels-and-durable-lifecycle). Profile deletion removes generated documents and records a cutoff; deferred or amended-result jobs recheck consent and cutoff before generating anything.
+
+Use a pre-upgrade snapshot when rolling back to the foundation-only image: it correctly refuses the newer product schema. No down migration discards product records. All new tables participate in the existing SQLite snapshot/restore and container-volume recovery procedure.

@@ -2,13 +2,24 @@
 """Render the same resources Terraform uses for operators who prefer kubectl."""
 
 import argparse
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 
-def render(image, worker_name="demure", storage_path="/var/lib/argument-arena", pull_secret=""):
-    pattern = r"(?:[A-Za-z0-9._:-]+/)*[A-Za-z0-9._-]+(?::[A-Za-z0-9_][A-Za-z0-9_.-]*|@sha256:[a-f0-9]{64})"
+def render(
+    image,
+    guild_id,
+    worker_name="demure",
+    storage_path="/var/lib/argument-arena",
+    pull_secret="",
+    llm_model="gpt-4.1-mini",
+    llm_endpoint="https://api.openai.com/v1/chat/completions",
+):
+    pattern = (
+        r"(?:[A-Za-z0-9._:-]+/)*[A-Za-z0-9._-]+"
+        r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]*|@sha256:[a-f0-9]{64})"
+    )
     if not re.fullmatch(pattern, image) or image.endswith(":latest"):
         raise ValueError("Provide a versioned image tag or digest.")
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", worker_name):
@@ -17,12 +28,29 @@ def render(image, worker_name="demure", storage_path="/var/lib/argument-arena", 
         raise ValueError("Use a persistent absolute directory under /var.")
     if pull_secret and not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", pull_secret):
         raise ValueError("Invalid registry Secret name.")
+    if not re.fullmatch(r"[1-9][0-9]{0,19}", guild_id) or not int(guild_id) < 2**64:
+        raise ValueError("Use a positive unsigned 64-bit Discord server ID.")
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", llm_model):
+        raise ValueError("Invalid model identifier.")
+    if not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::443)?/[A-Za-z0-9_./-]+", llm_endpoint):
+        raise ValueError("Use an HTTPS API URL without credentials, query parameters or fragments.")
     source = Path(__file__).resolve().parents[1] / "infra/resources.yaml.tftpl"
     template = source.read_text()
-    template = re.sub(r'%\{ if pull_secret != "" ~\}\n(.*?)%\{ endif ~\}\n',
-                      lambda match: match[1] if pull_secret else "", template, flags=re.DOTALL)
-    for key, value in {"image": image, "worker_name": worker_name,
-                       "storage_path": storage_path, "pull_secret": pull_secret}.items():
+    template = re.sub(
+        r'%\{ if pull_secret != "" ~\}\n(.*?)%\{ endif ~\}\n',
+        lambda match: match[1] if pull_secret else "",
+        template,
+        flags=re.DOTALL,
+    )
+    for key, value in {
+        "image": image,
+        "guild_id": guild_id,
+        "worker_name": worker_name,
+        "storage_path": storage_path,
+        "pull_secret": pull_secret,
+        "llm_model": llm_model,
+        "llm_endpoint": llm_endpoint,
+    }.items():
         template = template.replace("${" + key + "}", value)
     if "${" in template or "%{" in template:
         raise ValueError("An infrastructure template variable was not rendered.")
@@ -32,9 +60,12 @@ def render(image, worker_name="demure", storage_path="/var/lib/argument-arena", 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
+    parser.add_argument("--guild-id", required=True)
     parser.add_argument("--worker-name", default="demure")
     parser.add_argument("--storage-path", default="/var/lib/argument-arena")
     parser.add_argument("--pull-secret", default="")
+    parser.add_argument("--llm-model", default="gpt-4.1-mini")
+    parser.add_argument("--llm-endpoint", default="https://api.openai.com/v1/chat/completions")
     args = parser.parse_args()
     try:
         sys.stdout.write(render(**vars(args)))

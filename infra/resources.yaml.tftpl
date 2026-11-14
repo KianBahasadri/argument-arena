@@ -79,25 +79,34 @@ spec:
           imagePullPolicy: IfNotPresent
           startupProbe:
             exec:
-              command: [python, -c, "import os,time; assert time.time()-os.stat('/tmp/arena-live').st_mtime < 90"]
+              command: [argument-arena, healthcheck, --liveness]
             periodSeconds: 10
             failureThreshold: 12
           livenessProbe:
             exec:
-              command: [python, -c, "import os,time; assert time.time()-os.stat('/tmp/arena-live').st_mtime < 90"]
+              command: [argument-arena, healthcheck, --liveness]
             periodSeconds: 30
             failureThreshold: 3
           readinessProbe:
             exec:
-              command: [python, -c, "import os,time; assert time.time()-os.stat('/tmp/arena-ready').st_mtime < 90"]
+              command: [argument-arena, healthcheck]
             periodSeconds: 10
             failureThreshold: 2
-          envFrom:
-            - secretRef:
-                name: bot-credentials
           env:
-            - name: DATABASE_PATH
-              value: /data/arena.sqlite3
+            - name: AA_DATA_DIR
+              value: /var/lib/argument-arena
+            - name: AA_DISCORD_TOKEN_FILE
+              value: /run/secrets/discord-token
+            - name: AA_GUILD_ID
+              value: "${guild_id}"
+            - name: AA_LLM_KEY_FILE
+              value: /run/secrets/llm-key
+            - name: AA_SEARCH_KEY_FILE
+              value: /run/secrets/search-key
+            - name: AA_LLM_MODEL
+              value: "${llm_model}"
+            - name: AA_LLM_ENDPOINT
+              value: "${llm_endpoint}"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -112,7 +121,10 @@ spec:
               memory: 512Mi
           volumeMounts:
             - name: data
-              mountPath: /data
+              mountPath: /var/lib/argument-arena
+            - name: credentials
+              mountPath: /run/secrets
+              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -122,6 +134,10 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 32Mi
+        - name: credentials
+          secret:
+            secretName: bot-credentials
+            defaultMode: 0440
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

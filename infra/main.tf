@@ -8,6 +8,9 @@ locals {
     worker_name  = var.worker_name
     storage_path = var.storage_path
     pull_secret  = var.pull_secret
+    guild_id     = var.guild_id
+    llm_model    = var.llm_model
+    llm_endpoint = var.llm_endpoint
   })) : yamldecode(document)]
   resources = { for document in local.documents : "${document.kind}/${document.metadata.name}" => document if document.kind != "Namespace" }
 }

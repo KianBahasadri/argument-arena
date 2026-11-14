@@ -13,6 +13,33 @@ variable "image" {
   }
 }
 
+variable "guild_id" {
+  type        = string
+  description = "Intended Discord server snowflake; not a secret."
+  validation {
+    condition     = can(regex("^[1-9][0-9]{0,19}$", var.guild_id)) && try(tonumber(var.guild_id) < 18446744073709551616, false)
+    error_message = "Use a positive unsigned 64-bit Discord server ID."
+  }
+}
+
+variable "llm_model" {
+  type    = string
+  default = "gpt-4.1-mini"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._:/-]{1,100}$", var.llm_model))
+    error_message = "Use a model identifier without whitespace or quotes."
+  }
+}
+
+variable "llm_endpoint" {
+  type    = string
+  default = "https://api.openai.com/v1/chat/completions"
+  validation {
+    condition     = can(regex("^https://[A-Za-z0-9.-]+(:443)?/[A-Za-z0-9_./-]+$", var.llm_endpoint))
+    error_message = "Use an HTTPS API URL without credentials, query parameters or fragments."
+  }
+}
+
 variable "worker_name" {
   type    = string
   default = "demure"

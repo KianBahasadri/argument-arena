@@ -2,7 +2,33 @@
 set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
-python3 -m pymarkdown --config .pymarkdown.json scan --recurse --respect-gitignore .
-python3 -m ruff check arena tests scripts
-python3 -m unittest discover -s tests -v
-python3 -m compileall -q arena
+PYTHON="${PYTHON:-python3}"
+"$PYTHON" -c 'import sys; assert sys.version_info[:2] == (3, 12), "Python 3.12 required"'
+terraform_binary="$("$PYTHON" scripts/ensure-terraform.py)"
+export PATH="$(dirname -- "$terraform_binary"):$PATH"
+# The worker may invoke this entry point after installing only requirements-dev.txt.
+"$PYTHON" -m pip install --no-deps --no-build-isolation --editable .
+"$PYTHON" -m pip check
+"$PYTHON" -m ruff check src tests scripts
+"$PYTHON" -m ruff format --check src tests scripts
+"$PYTHON" -m pytest --strict-config --strict-markers
+"$PYTHON" scripts/check-product-contract.py
+"$PYTHON" -m pymarkdown --config .pymarkdown.json scan --recurse --respect-gitignore .
+
+# Use an isolated copy so local tfvars, state and backends can never affect validation.
+validation_dir="$(mktemp -d)"
+trap 'rm -rf -- "$validation_dir"' EXIT
+cp infra/terraform/*.tf infra/terraform/.terraform.lock.hcl "$validation_dir/"
+cp -R infra/terraform/tests "$validation_dir/"
+terraform -chdir=infra/terraform fmt -check -recursive
+terraform -chdir="$validation_dir" init -backend=false -input=false -lockfile=readonly -no-color
+terraform -chdir="$validation_dir" validate -no-color
+terraform -chdir="$validation_dir" test -no-color
+# Check the Guaranine target without reading operator kubeconfig, tfvars or state.
+mkdir "$validation_dir/kubernetes"
+cp infra/*.tf infra/.terraform.lock.hcl infra/resources.yaml.tftpl "$validation_dir/kubernetes/"
+terraform -chdir=infra fmt -check
+terraform -chdir="$validation_dir/kubernetes" init -backend=false -input=false -lockfile=readonly -no-color
+terraform -chdir="$validation_dir/kubernetes" validate -no-color
+"$PYTHON" -m build --no-isolation --outdir "$validation_dir/dist"
+"$PYTHON" scripts/check-container.py

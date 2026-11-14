@@ -2,9 +2,11 @@
 
 A Discord bot for a server built around arguments: organize one-on-one debate matches, moderate the conversation, research claims, score arguments with LLMs, and help members improve through feedback and practice.
 
-**Status: implemented, awaiting live server verification.** The repository includes the discord.py bot, transactional SQLite persistence, match workflows, research and judging providers, training, consent-based profiles, tests, container packaging, and Guaranine deployment configuration. No image has been published or workload deployed by this implementation. External AI features require configured provider credentials.
+**Status: complete product implementation on the merged Python 3.12 / discord.py foundation.** Server setup, negotiated matches, durable lifecycle, sourced research, configurable assistance/judging, Elo competition, original reasoning training and consent-controlled profiles are implemented with offline tests. The non-root container, SQLite migrations/backup, Terraform deployment and shared validation entry point are retained. The owner's server inputs remain intentionally blank; no live Discord installation, paid provider call or deployment is claimed.
 
-Start with the [command guide](docs/commands.md), [configuration](docs/configuration.md), [architecture and validation](docs/architecture.md), and [Guaranine deployment walkthrough](docs/deployment.md). The sections below retain the product requirements; the guides describe the implemented commands and chosen defaults.
+Start with [installation and Discord intents](docs/getting-started.md), [product settings and policies](docs/product.md), [executable commands](docs/commands.md), [feature-to-test checklist](docs/feature-checklist.md), [deployment/recovery](docs/deployment.md), [architecture](docs/architecture.md) and [development validation](docs/development.md). The sections below retain the complete product specification; the linked policy documents the selected defaults, integrations, rubric, rating formula and exact command arguments.
+
+For the Guaranine K3s cluster, follow the [Guaranine deployment walkthrough](docs/guaranine.md). Both deployment targets run the same `src/argument_arena` package and container image.
 
 ## Requested feature scope
 
@@ -23,7 +25,7 @@ Start with the [command guide](docs/commands.md), [configuration](docs/configura
 - Move finished match channels into the appropriate server categories automatically.
 - Build user profiles covering positions argued for or against, interests, and patterns in argument style, including moral versus empirical themes and technology or engineering versus art.
 
-The sections below describe the feature scope and intended behavior. Concrete command names, defaults and operational choices are documented in the guides above.
+The sections below define the delivered behavior. The [product policy](docs/product.md) records the implementation choices and exact defaults.
 
 ## Match workflow
 
@@ -75,9 +77,9 @@ Discord documents separate permissions for parent-channel messages and messages 
 
 Every optional per-match feature must expose an explicit on/off control during setup. Features with parameters also expose those parameters. The bot shows the effective settings before acceptance and saves that configuration with the match.
 
-These are suggested starting defaults, not final policy:
+These are the implemented starting defaults; effective settings are shown before acceptance:
 
-| Feature | On/off behavior | Additional settings | Suggested default |
+| Feature | On/off behavior | Additional settings | Starting default |
 | --- | --- | --- | --- |
 | Public claim tracking | Publish attributed claims and their status | Update frequency and detail | On |
 | Background fact checking | Research factual claims as the match progresses | Research depth, source preferences, budget | On |
@@ -163,7 +165,7 @@ If automatic archival is enabled, the bot moves the channel to the destination f
 - Keep final judging separate from live scores, audience sentiment, and timeout outcomes.
 - Allow a disputed judgment to be reviewed by staff. An amended result must update the record and any affected ratings.
 
-The implemented scoring scale, weights, tie threshold and staff review process are documented in [configuration](docs/configuration.md).
+The implemented [Arena-v1 rubric and review policy](docs/product.md#judging-and-competition) defines scores, weights, tie thresholds and corrections.
 
 ## Leaderboards and competitive records
 
@@ -177,7 +179,7 @@ The implemented scoring scale, weights, tie threshold and staff review process a
 - Show rating changes and the reason for each update, including reversals after a corrected result.
 - Treat emoji counts and any audience vote as separate social feedback rather than the official competitive score.
 
-The ranked preset requires final judging, the shared scoring rubric, and turn enforcement. Elo starts at 1200 with K=32. Leaderboards support topic, time, preset and minimum-activity filters. Forfeits are unrated unless both players agree otherwise; repeat opponents are permitted. See [configuration](docs/configuration.md) for result eligibility and correction handling.
+The implemented ranked-v1 preset requires consistent judging, turn and limit rules. [Rating policy](docs/product.md#judging-and-competition) specifies Elo, activity eligibility, forfeits and repeat-opponent limits.
 
 ## Argument training
 
@@ -219,7 +221,7 @@ Initial practice topics can include:
 | Cherry picking | [Cherry Picking](https://www.logicallyfallacious.com/logicalfallacies/Cherry-Picking) |
 | Shifting the burden of proof | [Shifting of the Burden of Proof](https://www.logicallyfallacious.com/logicalfallacies/Shifting-of-the-Burden-of-Proof) |
 
-The initial list is a starting set; practice should expand to additional entries in the library. The library supplies credited reference links; the bundled curriculum uses original exercises and explanations rather than copying its text.
+The original curriculum implements these eight families plus red herring and appeal to popularity, with per-entry attribution and reference links. It uses original exercises and teaching notes; it does not copy the library in bulk. [Training policy](docs/product.md#training-and-profiles) covers grading, variants and progression.
 
 ## User profiles and argument tendencies
 
@@ -246,7 +248,7 @@ Users can view the evidence behind a profile observation, correct a mischaracter
 
 ## Command surface
 
-The command guide documents the complete interface, including `/profile view`, `/train answer`, `/match options`, source submission, staff review and corrections. Persistent buttons and a JSON settings form support match agreement.
+The commands below are implemented. Buttons, select menus and forms expose settings. See [exact command arguments and additional controls](docs/commands.md).
 
 | Command | Purpose |
 | --- | --- |
@@ -268,7 +270,7 @@ The command guide documents the complete interface, including `/profile view`, `
 | `/match result <id>` | Retrieve a completed result and feedback |
 | `/match archive <id>` | Let authorized staff archive a finished channel manually |
 | `/leaderboard` | View competitive standings and filters |
-| `/profile [@member]` | View an available debate profile and history |
+| `/profile view [member]` | View an available debate profile and history |
 | `/profile settings` | Manage profile analysis and visibility preferences |
 | `/profile remove-insights` | Request removal of generated tendency analysis |
 | `/train start` | Start a puzzle or training battle |
@@ -278,7 +280,7 @@ The command guide documents the complete interface, including `/profile view`, `
 
 Read-only spectators should still be able to invoke permitted application commands, including issuing a new challenge. Interaction responses and settings forms must respect the main-channel conversation rules.
 
-## Implemented feature areas
+## Implementation phases
 
 - [x] **Match foundation:** administrator setup, challenges, mutual acceptance, settings, channel permissions, reactions, public threads, and challenges originating in threads.
 - [x] **Lifecycle:** turn tracking, 24-hour response deadlines, reminders, concessions, draws, forfeits, moderator controls, durable results, and category archival.
@@ -287,15 +289,16 @@ Read-only spectators should still be able to invoke permitted application comman
 - [x] **Training:** Logically Fallacious references, focused drills, mixed puzzles, bot battles, explanations, and progress tracking.
 - [x] **Profiles:** topic interests, positions argued, argument tendencies, evidence links, user controls, and personalized practice recommendations.
 
-The implementation uses Python 3.12 and discord.py, with one bot process and a persistent SQLite database. It supports OpenAI-compatible LLM providers and Tavily search. Infrastructure is defined in Terraform and a shared Kubernetes resource template; Guaranine uses a retained local volume on the selected worker. See the configuration guide for ranked rules and provider choices, and the deployment guide for storage and availability limits.
+The technical foundation uses Python 3.12 with discord.py, a single process, and durable SQLite storage. Terraform defines a portable container deployment on the owner's existing server; a [declarative host adapter contract](docs/host-adapter.md) keeps OS-specific setup pending the deliberately unspecified server inputs. All product phases above are implemented. OpenAI-compatible JSON Chat Completions and Brave search with HTTPS retrieval are configurable runtime integrations; absent keys produce explicit unavailable states. See the [feature checklist](docs/feature-checklist.md).
 
 ## Development validation
 
-With Python 3.12 in a virtual environment, install the pinned runtime and validation dependencies and run the shared validation entry point:
+With Python 3.12, Bash, and a local Docker daemon running Linux containers, install the pinned tools and package and run the shared validation entry point. It obtains checksum-verified Terraform 1.13.5 automatically when that version is absent from PATH:
 
 ```bash
-python3 -m pip install --requirement requirements-dev.txt
+bash scripts/setup-dev.sh
+source .venv/bin/activate
 bash scripts/validate.sh
 ```
 
-Validation checks Markdown, Python lint, unit/integration tests, deployment security and networking invariants, and compilation. The required `Clusterfork validation` CI job uses the same entry point. Run Terraform formatting and validation as described in the architecture guide when changing infrastructure. Tests use fake Discord/provider boundaries; the operator must still verify a real rollout and provider accounts.
+Validation checks Python lint/format, application/configuration/persistence/product tests and command/settings contracts, Markdown, Python package builds, a real container build and isolated persistence/recovery smoke checks, Terraform fmt/validate, and provider-mocked plans. It requires no Discord token, server credentials, or live apply. The required **Clusterfork validation** CI job runs the same entry point. See [development](docs/development.md) for tool setup and dependency updates.

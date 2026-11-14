@@ -1,26 +1,47 @@
 [build-system]
-requires = ["setuptools>=75"]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "argument-arena"
-version = "0.1.0"
-description = "Persistent Discord debates, research, judging, training and profiles"
-requires-python = ">=3.12"
-dependencies = ["discord.py==2.7.1", "aiohttp==3.14.5"]
+version = "0.2.0"
+description = "Durable Discord debate, research, judging and reasoning practice"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "discord.py==2.7.1",
+  "aiosqlite==0.22.1",
+  "filelock==3.20.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build==1.3.0",
+  "pip==25.0.1",
+  "pip-tools==7.5.2",
+  "pytest==8.4.2",
+  "pytest-asyncio==1.2.0",
+  "pymarkdownlnt==0.9.41",
+  "PyYAML==6.0.3",
+  "ruff==0.14.4",
+  "setuptools==80.9.0",
+  "wheel==0.45.1",
+]
 
 [project.scripts]
-argument-arena = "arena.__main__:main"
+argument-arena = "argument_arena.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["arena*"]
+where = ["src"]
 
-[tool.setuptools.package-data]
-arena = ["fallacies.json"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
 
 [tool.ruff]
 target-version = "py312"
-line-length = 110
+line-length = 100
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]

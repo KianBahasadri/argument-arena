@@ -1,18 +1,22 @@
 import importlib.util
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 import yaml
 
-
-spec = importlib.util.spec_from_file_location("render", Path(__file__).resolve().parents[1] / "scripts/render_manifests.py")
+spec = importlib.util.spec_from_file_location(
+    "render", Path(__file__).resolve().parents[1] / "scripts/render_manifests.py"
+)
 renderer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(renderer)
 
 
 class InfrastructureTests(unittest.TestCase):
     def resources(self, **kwargs):
-        return {r["kind"] + "/" + r["metadata"]["name"]: r for r in yaml.safe_load_all(renderer.render("ghcr.io/example/bot:1.0", **kwargs))}
+        return {
+            r["kind"] + "/" + r["metadata"]["name"]: r
+            for r in yaml.safe_load_all(renderer.render("ghcr.io/example/bot:1.0", "123", **kwargs))
+        }
 
     def test_nonroot_restricted_single_replica_with_retained_static_storage(self):
         resources = self.resources()
@@ -31,9 +35,16 @@ class InfrastructureTests(unittest.TestCase):
         volume = resources["PersistentVolume/argument-arena-data"]["spec"]
         self.assertEqual(volume["persistentVolumeReclaimPolicy"], "Retain")
         self.assertNotIn("hostPath", volume)
-        self.assertEqual(volume["nodeAffinity"]["required"]["nodeSelectorTerms"][0]["matchExpressions"][0]["values"], ["demure"])
+        self.assertEqual(
+            volume["nodeAffinity"]["required"]["nodeSelectorTerms"][0]["matchExpressions"][0][
+                "values"
+            ],
+            ["demure"],
+        )
         self.assertEqual(resources["PersistentVolumeClaim/data"]["spec"]["storageClassName"], "")
-        self.assertFalse(any(r["kind"] in ("Service", "Ingress", "Secret") for r in resources.values()))
+        self.assertFalse(
+            any(r["kind"] in ("Service", "Ingress", "Secret") for r in resources.values())
+        )
 
     def test_network_is_default_deny_with_dns_and_only_public_https_egress(self):
         resources = self.resources()
@@ -48,10 +59,30 @@ class InfrastructureTests(unittest.TestCase):
     def test_private_images_and_template_injection_validation(self):
         pod = self.resources(pull_secret="ghcr-pull")["Deployment/bot"]["spec"]["template"]["spec"]
         self.assertEqual(pod["imagePullSecrets"], [{"name": "ghcr-pull"}])
-        renderer.render("ghcr.io/example/bot@sha256:" + "a" * 64)
-        for value in ("bot:latest", "bot", "ghcr.io/example/bot", "bot@sha256:short", "bot:1\n  privileged: true", "${bad}"):
+        renderer.render("ghcr.io/example/bot@sha256:" + "a" * 64, "123")
+        for value in (
+            "bot:latest",
+            "bot",
+            "ghcr.io/example/bot",
+            "bot@sha256:short",
+            "bot:1\n  privileged: true",
+            "${bad}",
+        ):
             with self.assertRaises(ValueError):
-                renderer.render(value)
+                renderer.render(value, "123")
+
+    def test_guild_and_provider_values_cannot_inject_template_content(self):
+        for guild in ("", "0", "-1", "١", str(2**64), "123\n  invalid: true"):
+            with self.assertRaises(ValueError):
+                renderer.render("bot:1", guild)
+        for options in (
+            {"llm_model": 'model"\n  invalid: true'},
+            {"llm_endpoint": "https://user:secret@example.com/chat"},
+            {"llm_endpoint": "http://example.com/chat"},
+            {"llm_endpoint": 'https://example.com/chat"\n  invalid: true'},
+        ):
+            with self.assertRaises(ValueError):
+                renderer.render("bot:1", "123", **options)
 
 
 if __name__ == "__main__":

@@ -1,83 +1,51 @@
-# Using Argument Arena
+# Commands and interaction states
 
-Commands run inside the configured Discord server. Most match commands infer the match from its main channel; provide `match_id` when using them elsewhere. Spectators can read permitted reports and issue challenges without ordinary posting access in a match channel. Long reports are attached as JSON files with their evidence rather than truncated.
+Use commands in the configured server, including a public discussion thread. Responses are ephemeral; large details are attached as JSON. IDs come from challenge/status notices. Category/channel/role selection uses Discord pickers. Match controls also have feature selectors, parameter forms, confirmation and decline buttons. [Product policy](product.md) documents defaults, parameters, providers and outcome semantics.
 
-## Administration
+| Command | Authority and inputs | Result |
+| --- | --- | --- |
+| `/diagnostic` | Administrator | Version, storage and Gateway latency |
+| `/setup` | Administrator; `active`, `completed`, `forfeited`, `cancelled` categories; optional `announcement`, `results`, `moderator` | Saved routes and authority |
+| `/settings server` | Everyone can view; Administrator can supply `patch` JSON | Full policy, defaults, presets, usage and model configuration |
+| `/settings audit` | Administrator | Server change history |
+| `/match challenge` | Human member; `member`, `topic`, `your_position`, `their_position`, optional `preset` | Proposed settings/revision; origin link retained |
+| `/match accept` | Participant; `match_id`, `revision` | Confirmation, or stale-revision error; channel creation after both confirm |
+| `/match decline` | Participant; `match_id` | Pending challenge cancelled |
+| `/match settings` | View: members; edit: participants before acceptance; `match_id`, optional feature `patch` JSON and `positions` JSON array | Effective settings, all 20 feature controls and revision |
+| `/match status` | Members; `match_id` | State, settings, exact UTC speaker deadline, proposals and job failures |
+| `/match submit` | Required participant; `match_id` | Commit the newly posted submit-mode turn |
+| `/match claims` | Members; `match_id`; public ledger must be enabled | Quotes, kinds, relations, evidence/status and complete correction history |
+| `/match check` | Participant; `claim_id`; on-demand must be enabled | Queued, pending, not-checkable or budget-limit state |
+| `/match dispute` | Participant; `match_id`, claim ID or `result` as `target`, `reason`; optional `source` HTTPS URL, `related_claim` | Audited dispute and eligible recheck |
+| `/match pause` | Participant proposal/agreement or staff; `match_id` | Active proposal or paused clock |
+| `/match resume` | Participant proposal/agreement or staff; `match_id` | Resume saved remaining response time |
+| `/match extend` | Participant proposal/agreement or staff; `match_id`, `hours` 1–168 | Agreed extension |
+| `/match request` | Participant proposal/agreement or staff; `match_id`, `speaker`; flexible order only | Explicit required-response deadline |
+| `/match concede` | Participant; `match_id` | Immediate concession result |
+| `/match draw` | Participant proposal/agreement or staff; `match_id` | Agreed draw |
+| `/match finish` | Participant proposal/agreement or staff; `match_id` | Judging pending, or finished without judging |
+| `/match cancel` | Participant proposal/agreement or staff; `match_id` | Cancelled result |
+| `/match result` | Members; `match_id` | Pending state or result/report/references/deltas; private feedback filtered per recipient |
+| `/match archive` | Staff; `match_id`; completed only | Durable archival request |
+| `/match correct` | Staff; `match_id`, `outcome`, `reason`, optional participant `winner` | Audited review and chronological rating corrections |
+| `/match audit` | Staff; `match_id` | Accepted rules, lifecycle, edits, disputes, moderation and rating changes |
+| `/match retry` | Staff; `match_id` | Retry failed jobs after resolving configuration/limits |
+| `/match close` | Staff; `match_id`, `outcome`, `reason`, optional participant `winner` | Explicit audited decision for active, paused or judging matches, independent of provider availability |
+| `/match history` | Members; optional `member`, `topic`, `days` | Public managed-match records, including casual outcomes, procedural statistics and result links |
+| `/match vote` | Eligible human; `match_id`, participant `winner`; enabled voting window | Separate replaceable audience opinion |
+| `/leaderboard` | Members; optional `topic`, `days`, `format_name`, `minimum_matches` | Current Elo, filtered records and result links |
+| `/profile view` | Owner or public visibility; optional `member` | Consented history, observations, evidence and sample sizes |
+| `/profile settings` | Self; optional `analysis`, `visibility`, `training`, `recommendations` | Read/update preferences |
+| `/profile remove-insights` | Self | Delete generated observations, disable analysis and block old-job regeneration |
+| `/profile correct` | Self; `match_id`, `note`, optional `exclude` | Attached correction or exclusion from aggregates |
+| `/train start` | Self; optional `mode`, `difficulty`, `topic`, `fallacy` | Original private exercise; one active session per member |
+| `/train fallacy` | Self; `name`, optional `difficulty`, `topic` | Selected-family original practice |
+| `/train hint` | Self | Counted optional hint |
+| `/train answer` | Self; free-text `explanation` | Durable answer awaiting explanation-based grading |
+| `/train current` | Self | Prompt, last feedback, provider/job status |
+| `/train progress` | Self | Accuracy, recent changes, per-family records and recommendations |
+| `/train library` | Members | Supported names and attribution/reference URLs |
+| `/train stop` | Self | Stop current session, retain graded progress |
+| `/train retry` | Self | Retry failed grading after provider setup |
 
-1. Create active, completed, forfeited, and cancelled categories in Discord.
-2. Run `/setup` with those categories, an optional moderator role, and optional results/announcement channels.
-3. Review `/settings server`; administrators can patch server settings with JSON.
-4. Run `/ping` to check the bot's gateway connection.
-
-An administrator can configure the server. Configured moderators can manage matches, archive channels, review disputes and correct results. Changing category membership preserves explicit match permissions. Discord administrators retain Discord's built-in permission bypass.
-
-## Challenge and agree on settings
-
-`/match challenge member:<opponent> topic:<topic>` creates a challenge. Optional arguments specify positions and a preset. Challenges issued in public discussion threads retain a link to their origin. Built-in presets are `casual`, `ranked`, `no-research`, and `coaching`; administrators can add more.
-
-`/match options` lists all available settings. Inspect `/match settings match_id:<id>` and propose changed keys with the `patch` parameter or the settings button. For a first match without external AI calls, use:
-
-```json
-{
-  "claim_tracking": false,
-  "background_research": false,
-  "on_demand_checks": false,
-  "civility": false,
-  "judging": false,
-  "feedback": false
-}
-```
-
-The opponent runs `/match accept match_id:<id>` or presses Accept. Each changed proposal requires both players' confirmation. The bot creates the match channel only after agreement. `/match decline` declines a challenge or pending settings change.
-
-## Debate and research
-
-The required speaker posts in the main channel, then runs `/match submit`. The other participant receives posting access and a response deadline. Everyone can read, react and use discussion threads when the accepted settings allow it. Main-channel moderator messages and all thread messages are excluded from judging.
-
-| Command | Behavior |
-| --- | --- |
-| `/match status` | Current state, required speaker, deadline and pending action |
-| `/match settings` | Effective feature settings and proposed changes |
-| `/match claims` | Attributed claim ledger, source links, checks and revision status |
-| `/match check claim_id:C1` | Queue an enabled, budgeted on-demand check or recheck |
-| `/match source claim_id:C1 url:<https-url>` | Attach a source for a later check |
-| `/match dispute target:C1 reason:<explanation>` | Record a claim dispute for staff |
-| `/match dispute target:result reason:<explanation>` | Record a result dispute |
-| `/match request member:<participant>` | Agree on the required speaker in flexible-order play |
-| `/match vote member:<participant>` | Submit a separately recorded audience vote when enabled |
-
-Research can show pending, complete, stale, unavailable, failed, or budget-limited status. An edited/deleted message invalidates its prior checks. A possible fallacy or civility concern includes quoted text and an explanation; it remains distinguishable from staff moderation. Coaching and feedback follow the accepted delivery setting.
-
-## Pause and finish
-
-`/match pause`, `/match resume`, `/match extend hours:<number>`, `/match draw`, `/match finish`, and `/match cancel` require both participants to request the same action. Configured staff can perform these actions directly. `/match concede` immediately records a loss for the conceding participant.
-
-An expired required-speaker deadline results in a procedural forfeit when enabled. Bot interruptions extend the clock before expiry is checked. A forfeit does not establish that the winner's claims are true.
-
-Finishing a judged match queues analysis after pending evidence work. `/match result` retrieves its report. `/leaderboard` supports topic, recent-day, preset and minimum-match filters and keeps ranked records separate from casual matches, training and audience feedback.
-
-Staff use `/match review match_id:<id>` to inspect audit events, optionally request a fresh proposed judgment, and use `/match correct match_id:<id> reason:<explanation> winner:<member>` to record a reviewed winner. Omitting the winner records a draw. Corrections retain history and rebuild affected ratings. `/match archive` manually moves a finished channel while retaining its intended permissions.
-
-## Training
-
-`/train start` offers spot-the-fallacy, mixed, argument repair, sound-or-fallacious, training battle, and personalized review modes. `/train fallacy name:<fallacy>` focuses on a named fallacy. Choose `easy`, `normal`, or `hard` difficulty and an optional topic.
-
-Use `/train answer text:<explanation>` to identify and explain the reasoning error or submit a repair. Naming a fallacy alone is insufficient. `/train hint` provides help; `/train progress` shows identification and explanation scores, practice history and recommended exercises. Battles run for up to five turns. Explanations and feedback link to the relevant Logically Fallacious reference; the exercises are original.
-
-An LLM provider is required for free-text grading and newly generated/custom exercises. Provider failure records no fabricated grade and permits retry. Curated starting exercises and hints are available without a provider.
-
-## Profiles and privacy
-
-`/profile view` shows your profile; its optional member argument requests an available public profile. Profiles default to private with analysis disabled. To opt in, use `/profile settings` with:
-
-```json
-{
-  "opt_in": true,
-  "visibility": "private",
-  "training_recommendations": true
-}
-```
-
-The match must also enable `profile_insights`. Generated observations cite the author's messages and show sample sizes and dates. They describe argument behavior and positions argued, without asserting psychological diagnoses or personal beliefs. Training analysis is separately controlled with `training_analysis`.
-
-`/profile dispute` records an explanation of a mischaracterization. Corrections to a specific insight can also be submitted through `/profile settings` with `{"correction":{"insight_id":"<id>","text":"<your correction>"}}`. `/profile remove-insights` purges generated insights and disables future analysis; official match results and practice history remain. Profile access rechecks visibility and eligible evidence each time.
+Authority is checked again at execution, including components. Only Administrator can change server rules; staff means Administrator or a configured moderator role. Staff lifecycle interventions are recorded. Other guilds, DMs, bot challenges, invalid transitions, disabled features and unavailable providers give explicit errors/states. Private DM failures remain private failed deliveries. They never fall back to public coaching.
