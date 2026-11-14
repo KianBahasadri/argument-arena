@@ -8,6 +8,8 @@ Start with [installation and Discord intents](docs/getting-started.md), [product
 
 For the Guaranine K3s cluster, follow the [Guaranine deployment walkthrough](docs/guaranine.md). Both deployment targets run the same `src/argument_arena` package and container image.
 
+User policies: [Privacy Policy](PRIVACY.md) and [Terms of Service](TERMS.md).
+
 ## Requested feature scope
 
 - Give the bot Administrator permissions so it can manage the server's debate workflow.
