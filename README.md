@@ -6,7 +6,7 @@ A Discord bot for a server built around arguments: organize one-on-one debate ma
 
 Start with [installation and Discord intents](docs/getting-started.md), [product settings and policies](docs/product.md), [executable commands](docs/commands.md), [feature-to-test checklist](docs/feature-checklist.md), [deployment/recovery](docs/deployment.md), [architecture](docs/architecture.md) and [development validation](docs/development.md). The sections below retain the complete product specification; the linked policy documents the selected defaults, integrations, rubric, rating formula and exact command arguments.
 
-For the Guaranine K3s cluster, follow the [Guaranine deployment walkthrough](docs/guaranine.md). Both deployment targets run the same `src/argument_arena` package and container image.
+For the Guaranine K3s cluster, follow the [Guaranine deployment walkthrough](docs/guaranine.md). GitHub Actions publishes validated main commits to GHCR; the walkthrough covers selecting an image digest and deploying it. Both deployment targets run the same `src/argument_arena` package and container image.
 
 User policies: [Privacy Policy](PRIVACY.md) and [Terms of Service](TERMS.md).
 
