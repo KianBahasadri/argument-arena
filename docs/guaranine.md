@@ -39,16 +39,16 @@ If the package was initially uploaded manually, check its settings to ensure it 
 
 Follow [Discord installation](getting-started.md) to enable Message Content Intent and install the bot with Administrator permission. Copy the server ID for the required `--guild-id` argument. LLM assistance uses an OpenAI-compatible provider; research uses Brave Search and independently retrieved HTTPS pages. Missing provider files produce an unavailable assessment without preventing match management.
 
-## Prepare local storage and credentials
+## Check storage and prepare credentials
 
-Guaranine has no default storage provisioner. The retained local PersistentVolume is pinned to one worker. On the worker, create its backing directory on Kairos's persistent `/usr/local` filesystem using existing administrative access:
+Guaranine's OpenEBS provisioner creates storage automatically when the bot uses its PVC. Check that the provisioner is ready and the `openebs-hostpath` StorageClass uses `Retain` and `WaitForFirstConsumer`:
 
 ```bash
-sudo install -d -m 0700 -o 10001 -g 10001 /usr/local/argument-arena
-findmnt -T /usr/local/argument-arena
+kubectl -n openebs rollout status deployment/openebs-localpv
+kubectl get storageclass openebs-hostpath
 ```
 
-Confirm that the backing filesystem is the persistent disk rather than an overlay or tmpfs. Kairos's `/var` overlay is temporary; the renderer and Terraform require host storage under `/usr/local`. The container still mounts the volume at `/var/lib/argument-arena`. The database stays on that laptop when it disconnects; the bot resumes there and conservatively extends response clocks after downtime. Run one replica per database.
+The app requests a 1Gi volume from that class. OpenEBS creates its directory under `/usr/local/openebs/local` on the selected worker's persistent Kairos disk; the pod's filesystem group gives UID/GID 10001 write access. No per-app SSH or directory preparation is required. The container mounts the volume at `/var/lib/argument-arena`. A claim stays Pending until its consumer is scheduled. Once bound, the database stays on that laptop when it disconnects; the bot resumes there and conservatively extends response clocks after downtime. Requested capacity is not a disk quota or a backup. Run one replica per database.
 
 Create the namespace, then prepare private UTF-8 files containing only the relevant token/key, without shell assignments:
 
@@ -81,8 +81,7 @@ Choose this workflow or Terraform below as the manager for these resources. Set 
 ```bash
 python scripts/render_manifests.py \
   --image "$arena_image" \
-  --guild-id 123456789012345678 \
-  --worker-name demure > /tmp/argument-arena.yaml
+  --guild-id 123456789012345678 > /tmp/argument-arena.yaml
 kubectl apply --dry-run=server -f /tmp/argument-arena.yaml
 kubectl apply -f /tmp/argument-arena.yaml
 kubectl -n argument-arena rollout status deployment/bot --timeout=180s
@@ -96,7 +95,7 @@ Run `/diagnostic` in Discord, create the four match categories, and run `/setup`
 
 ## Terraform alternative
 
-`infra/` renders the same Kubernetes template. It manages the namespace, PV, PVC, Deployment and NetworkPolicies on the existing cluster, and protects the namespace against destruction. `infra/terraform/` is the separate Docker-daemon target.
+`infra/` renders the same Kubernetes template. It manages the namespace, PVC, Deployment and NetworkPolicies on the existing cluster, and protects the namespace against destruction. OpenEBS manages the resulting PV and worker placement. `infra/terraform/` is the separate Docker-daemon target.
 
 ```bash
 terraform -chdir=infra init
@@ -116,4 +115,4 @@ Rotate mounted credential files by updating the Secret as above and running `kub
 
 The installed `argument-arena backup` and `restore` commands require the bot to be stopped and hold its process lock. Scale the deployment to zero and wait for its pod to terminate before maintenance. Use a temporary maintenance pod running the same image as UID/GID 10001, mounting PVC `data` at `/var/lib/argument-arena` and following the same restricted security context. Run `argument-arena backup /var/lib/argument-arena/backup.sqlite3`, and copy the verified snapshot to private storage outside the worker. Use a unique destination for each snapshot. For restore, run `argument-arena restore /var/lib/argument-arena/backup.sqlite3` in that maintenance pod; the CLI validates schema/integrity and stages replacement atomically. Delete the maintenance pod before scaling the deployment back to one. Keep the original backup until verification completes.
 
-The PV's Retain policy preserves data after claim removal; it does not provide a backup. Never copy only the open `arena.sqlite3` file or remove its WAL/SHM files while any process uses the database.
+The StorageClass's Retain policy preserves data after claim removal; it does not provide a backup. Never copy only the open `arena.sqlite3` file or remove its WAL/SHM files while any process uses the database. Existing installations with a manually bound static volume require an explicit backup and data migration before adopting this PVC configuration; do not replace or delete an existing claim to update the deployment.

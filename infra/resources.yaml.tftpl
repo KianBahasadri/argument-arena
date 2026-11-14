@@ -8,37 +8,13 @@ metadata:
     pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: argument-arena-data
-spec:
-  capacity:
-    storage: 1Gi
-  accessModes: [ReadWriteOnce]
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: ""
-  claimRef:
-    namespace: argument-arena
-    name: data
-  local:
-    path: ${storage_path}
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values: ["${worker_name}"]
----
-apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: data
   namespace: argument-arena
 spec:
   accessModes: [ReadWriteOnce]
-  storageClassName: ""
-  volumeName: argument-arena-data
+  storageClassName: openebs-hostpath
   resources:
     requests:
       storage: 1Gi
@@ -70,6 +46,8 @@ spec:
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        supplementalGroupsPolicy: Strict
         seccompProfile:
           type: RuntimeDefault
       terminationGracePeriodSeconds: 45

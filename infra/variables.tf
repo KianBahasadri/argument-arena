@@ -40,24 +40,6 @@ variable "llm_endpoint" {
   }
 }
 
-variable "worker_name" {
-  type    = string
-  default = "demure"
-  validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9.-]*$", var.worker_name))
-    error_message = "Use the Kubernetes worker node name."
-  }
-}
-
-variable "storage_path" {
-  type    = string
-  default = "/usr/local/argument-arena"
-  validation {
-    condition     = can(regex("^/usr/local/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$", var.storage_path))
-    error_message = "Use a persistent directory under /usr/local."
-  }
-}
-
 variable "pull_secret" {
   type        = string
   default     = ""

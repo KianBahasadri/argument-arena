@@ -5,8 +5,6 @@ provider "kubernetes" {
 locals {
   documents = [for document in split("\n---\n", templatefile("${path.module}/resources.yaml.tftpl", {
     image        = var.image
-    worker_name  = var.worker_name
-    storage_path = var.storage_path
     pull_secret  = var.pull_secret
     guild_id     = var.guild_id
     llm_model    = var.llm_model

@@ -18,7 +18,7 @@ class InfrastructureTests(unittest.TestCase):
             for r in yaml.safe_load_all(renderer.render("ghcr.io/example/bot:1.0", "123", **kwargs))
         }
 
-    def test_nonroot_restricted_single_replica_with_retained_static_storage(self):
+    def test_nonroot_restricted_single_replica_with_dynamic_storage(self):
         resources = self.resources()
         deployment = resources["Deployment/bot"]["spec"]
         self.assertEqual(deployment["replicas"], 1)
@@ -32,37 +32,32 @@ class InfrastructureTests(unittest.TestCase):
         self.assertEqual(container["securityContext"]["capabilities"]["drop"], ["ALL"])
         self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
         self.assertIn("readinessProbe", container)
-        volume = resources["PersistentVolume/argument-arena-data"]["spec"]
-        self.assertEqual(volume["persistentVolumeReclaimPolicy"], "Retain")
-        self.assertEqual(volume["local"]["path"], "/usr/local/argument-arena")
-        self.assertNotIn("hostPath", volume)
-        self.assertEqual(
-            volume["nodeAffinity"]["required"]["nodeSelectorTerms"][0]["matchExpressions"][0][
-                "values"
-            ],
-            ["demure"],
-        )
-        self.assertEqual(resources["PersistentVolumeClaim/data"]["spec"]["storageClassName"], "")
+        claim = resources["PersistentVolumeClaim/data"]["spec"]
+        self.assertEqual(claim["storageClassName"], "openebs-hostpath")
+        self.assertEqual(claim["accessModes"], ["ReadWriteOnce"])
+        self.assertEqual(claim["resources"]["requests"]["storage"], "1Gi")
         self.assertFalse(
-            any(r["kind"] in ("Service", "Ingress", "Secret") for r in resources.values())
+            any(
+                r["kind"] in ("PersistentVolume", "Service", "Ingress", "Secret")
+                for r in resources.values()
+            )
         )
 
-    def test_kairos_storage_uses_persistent_host_filesystem_and_runtime_mount(self):
-        resources = self.resources(storage_path="/usr/local/apps/argument-arena")
-        volume = resources["PersistentVolume/argument-arena-data"]["spec"]
-        self.assertEqual(volume["local"]["path"], "/usr/local/apps/argument-arena")
-        container = resources["Deployment/bot"]["spec"]["template"]["spec"]["containers"][0]
+    def test_claim_allows_consumer_placement_and_nonroot_database_writes(self):
+        resources = self.resources()
+        self.assertNotIn("volumeName", resources["PersistentVolumeClaim/data"]["spec"])
+        pod = resources["Deployment/bot"]["spec"]["template"]["spec"]
+        self.assertNotIn("nodeName", pod)
+        data = next(item for item in pod["volumes"] if item["name"] == "data")
+        self.assertEqual(data, {"name": "data", "persistentVolumeClaim": {"claimName": "data"}})
+        security = pod["securityContext"]
+        self.assertEqual(security["fsGroup"], security["runAsUser"])
+        self.assertEqual(security["fsGroup"], security["runAsGroup"])
+        self.assertEqual(security["fsGroupChangePolicy"], "OnRootMismatch")
+        container = pod["containers"][0]
         mount = next(item for item in container["volumeMounts"] if item["name"] == "data")
         self.assertEqual(mount["mountPath"], "/var/lib/argument-arena")
-        for path in (
-            "/var/lib/argument-arena",
-            "/tmp/argument-arena",
-            "/usr/local",
-            "/usr/local//",
-            "/usr/local/../var/lib/argument-arena",
-        ):
-            with self.subTest(path=path), self.assertRaises(ValueError):
-                self.resources(storage_path=path)
+        self.assertFalse(mount.get("readOnly", False))
 
     def test_network_is_default_deny_with_dns_and_only_public_https_egress(self):
         resources = self.resources()
