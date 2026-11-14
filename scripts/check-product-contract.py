@@ -9,7 +9,9 @@ from discord import app_commands
 
 from argument_arena.client import ArenaClient
 from argument_arena.config import Config
+from argument_arena.help_ui import HELP
 from argument_arena.settings import DEFAULTS
+from argument_arena.settings_ui import FEATURES
 from argument_arena.storage import Storage
 
 
@@ -32,6 +34,22 @@ async def main():
                         commands.append(command)
                 for command in commands:
                     assert f"`/{command.qualified_name}`" in documentation, command.qualified_name
+                assert {c.qualified_name for c in commands} == {
+                    "challenge",
+                    "match",
+                    "train",
+                    "profile",
+                    "leaderboard",
+                    "admin",
+                    "help",
+                }, "Keep superseded actions inside menus, not visible slash subcommands"
+                assert (
+                    client.tree.get_command("challenge", guild=client.guild).parameters[0].name
+                    == "member"
+                )
+    assert set(FEATURES) == set(DEFAULTS), "Every match feature needs a named UI control"
+    assert "24-hour" in HELP["automatic"][1]
+    assert "same revision" in HELP["start"][1]
     for feature in DEFAULTS:
         assert f"| `{feature}` |" in policy, feature
     assert readme.count("- [x] **") == 6, "Document all six completed implementation phases"

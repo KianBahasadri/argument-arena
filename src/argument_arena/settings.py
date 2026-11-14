@@ -77,7 +77,9 @@ def match_settings(patch: dict | None = None, base: dict | None = None) -> dict:
     result = deepcopy(DEFAULTS if base is None else base)
     if patch is not None:
         if not isinstance(patch, dict) or set(patch) - set(DEFAULTS):
-            raise ArenaError("Unknown match feature; view /match settings for available controls.")
+            raise ArenaError(
+                "Unknown match feature; open /match → Features for available controls."
+            )
         for feature, values in patch.items():
             if not isinstance(values, dict) or set(values) - set(DEFAULTS[feature]):
                 raise ArenaError(f"Unknown parameters for {feature}.")

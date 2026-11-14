@@ -32,7 +32,9 @@ class Training:
             )
         entry = find_fallacy(fallacy) if fallacy else None
         if fallacy and entry is None:
-            raise ArenaError("Unknown fallacy. Use /train library for supported references.")
+            raise ArenaError(
+                "Unknown fallacy. Open /train → Fallacy library for supported references."
+            )
         if mode == "selected" and entry is None:
             raise ArenaError("Selected practice requires a fallacy name.")
         async with self.repo.unit() as unit:
@@ -42,7 +44,9 @@ class Training:
                 (actor.guild, actor.id),
             )
             if active:
-                raise ArenaError("Finish the current exercise or use /train stop first.")
+                raise ArenaError(
+                    "Finish the current exercise or choose Stop session in /train first."
+                )
             progress = await unit.document(
                 "training_progress", f"{actor.guild}:{actor.id}", {"attempts": []}
             )
@@ -167,7 +171,7 @@ class Training:
             (actor.guild, actor.id),
         )
         if not row:
-            raise ArenaError("No active training. Use /train start.")
+            raise ArenaError("No active training. Open /train → Start practice.")
         return json.loads(row["data"])
 
     async def current(self, actor):
@@ -192,7 +196,8 @@ class Training:
             session = await self._current(unit, actor)
             if session["state"] == "grading":
                 raise ArenaError(
-                    "Your answer is awaiting grading. Use /train current or /train retry."
+                    "Your answer is awaiting grading. Open /train for status or "
+                    "Retry failed grading."
                 )
             session["state"], session["pending_answer"] = "grading", answer
             digest = hashlib.sha256(answer.encode()).hexdigest()[:16]
@@ -208,7 +213,7 @@ class Training:
                 self.arena.clock(),
             )
             return (
-                "Answer saved; grading pending. Use /train current for feedback. "
+                "Answer saved; grading pending. Open /train for feedback. "
                 "Missing providers report unavailable."
             )
 

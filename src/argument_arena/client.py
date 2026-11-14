@@ -64,14 +64,6 @@ class ArenaClient(discord.Client):
         self.gateway_ready = False
         self.tree = ArenaCommandTree(self)
         self.guild = discord.Object(id=config.guild_id)
-        command = app_commands.Command(
-            name="diagnostic",
-            description="Check the Argument Arena connection and storage",
-            callback=self.diagnostic,
-        )
-        command.guild_only = True
-        command.default_permissions = discord.Permissions(administrator=True)
-        self.tree.add_command(command, guild=self.guild)
         self.arena = Arena(storage)
         llm, research = configured_providers(config)
         self.assistance = Assistance(self.arena, llm, research)

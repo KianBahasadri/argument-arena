@@ -32,6 +32,17 @@ def require_staff(actor, config):
         raise ArenaError("Administrator or a configured moderator role required.")
 
 
+def validate_debate(topic, positions):
+    if (
+        not isinstance(topic, str)
+        or not 3 <= len(topic) <= 500
+        or not isinstance(positions, list)
+        or len(positions) != 2
+        or any(not isinstance(p, str) or not 1 <= len(p) <= 500 for p in positions)
+    ):
+        raise ArenaError("Supply a topic (3–500 characters) and two positions (1–500 each).")
+
+
 class Arena:
     def __init__(self, storage, clock=time.time):
         self.repo = Repository(storage)
@@ -69,22 +80,19 @@ class Arena:
             await unit.event(f"guild:{actor.guild}", "setup", actor.id, patch, self.clock())
             return config
 
-    async def challenge(self, actor, opponent, topic, positions, origin, preset="default"):
+    async def challenge(
+        self, actor, opponent, topic, positions, origin, preset="default", *, settings=None
+    ):
         if actor.bot or opponent == actor.id or not opponent.isdecimal():
             raise ArenaError("Choose another human server member.")
-        if (
-            not 3 <= len(topic) <= 500
-            or len(positions) != 2
-            or any(not isinstance(p, str) or not 1 <= len(p) <= 500 for p in positions)
-        ):
-            raise ArenaError("Supply a topic (3–500 characters) and two positions (1–500 each).")
+        validate_debate(topic, positions)
         now = self.clock()
         async with self.repo.unit() as unit:
             config = await unit.document("guild", actor.guild, server_defaults())
             if not config["categories"]["active"]:
-                raise ArenaError("An administrator must run /setup with an active category first.")
+                raise ArenaError("An administrator must open /admin → Set up routes first.")
             if preset not in config["presets"] and preset != "default":
-                raise ArenaError("Unknown preset. View /settings server.")
+                raise ArenaError("Unknown preset. Reopen /challenge to load the current presets.")
             recent = await unit.document("challenge_clock", f"{actor.guild}:{actor.id}", 0)
             if now - recent < config["challenge_cooldown"]:
                 raise ArenaError("Challenge cooldown active; try again shortly.")
@@ -96,7 +104,7 @@ class Arena:
                 if count >= config["max_concurrent"]:
                     raise ArenaError("A participant has reached the concurrent match limit.")
             settings = match_settings(
-                config["defaults"] if preset == "default" else config["presets"][preset]
+                settings, config["defaults"] if preset == "default" else config["presets"][preset]
             )
             match = {
                 "id": config["match_prefix"] + identity(),
@@ -136,25 +144,34 @@ class Arena:
                 match,
                 f"challenge:{match['id']}",
                 f"Challenge {match['id']}: {topic}. Both members must review "
-                "and accept the current revision with /match accept.",
+                "and confirm the current settings in /match. Select this challenge to review, "
+                "propose changes or decline. No match channel exists until both confirm.",
                 now,
                 destination=config["announcement"],
             )
             return match
 
-    async def settings(self, actor, match_id, patch=None, positions=None):
+    async def settings(
+        self, actor, match_id, patch=None, positions=None, *, topic=None, expected_revision=None
+    ):
         async with self.repo.unit() as unit:
             match = await unit.match(match_id, actor.guild)
-            if patch is None and positions is None:
+            if patch is None and positions is None and topic is None:
                 return match
             participant(match, actor)
             if match["state"] != "challenge":
                 raise ArenaError("Accepted rules are locked. Start a new match to change them.")
+            if expected_revision is not None and expected_revision != match["revision"]:
+                raise ArenaError("Settings changed. Reopen /match and review the current revision.")
             match["settings"] = match_settings(patch, match["settings"])
+            validate_debate(
+                topic if topic is not None else match["topic"],
+                positions if positions is not None else match["positions"],
+            )
             if positions is not None:
-                if len(positions) != 2 or any(not 1 <= len(p) <= 500 for p in positions):
-                    raise ArenaError("Supply exactly two nonempty positions, up to 500 characters.")
                 match["positions"] = positions
+            if topic is not None:
+                match["topic"] = topic
             match["revision"] += 1
             match["confirmed"] = []
             await unit.save_match(match)
@@ -166,6 +183,7 @@ class Arena:
                     "revision": match["revision"],
                     "settings": match["settings"],
                     "positions": match["positions"],
+                    "topic": match["topic"],
                 },
                 self.clock(),
             )
@@ -238,7 +256,7 @@ class Arena:
                 match,
                 f"turn:{match['id']}:{match['turn']}",
                 f"Turn {match['turn']} complete. Next: {match['next']}; "
-                f"deadline: {match['deadline']}. Use /match status for exact time.",
+                f"deadline: {match['deadline']}. Open /match for the exact time and controls.",
                 self.clock(),
             )
 
@@ -385,7 +403,7 @@ class Arena:
                 self.clock(),
             )
 
-    async def action(self, actor, match_id, action, data=None):
+    async def action(self, actor, match_id, action, data=None, *, expected_proposal=None):
         data = data or {}
         now = self.clock()
         async with self.repo.unit() as unit:
@@ -394,6 +412,10 @@ class Arena:
             staff = actor.staff(config)
             if not staff:
                 participant(match, actor)
+            if expected_proposal is not None and (
+                match.get("proposal") != expected_proposal or expected_proposal["by"] == actor.id
+            ):
+                raise ArenaError("The proposal changed. Review the newest /match summary.")
             if match["state"] == "closed":
                 raise ArenaError("Match already closed; use staff correction for result review.")
             if action == "decline":
@@ -557,7 +579,7 @@ class Arena:
             match,
             f"result:{match['id']}",
             f"Result {match['id']}: {outcome}; winner: {winner or 'none'}. {reason}. "
-            "Use /match result for the report, evidence and rating changes. "
+            "Open /match → Results for the report, evidence and rating changes. "
             "This result does not establish factual truth; audience votes are separate.",
             now,
         )

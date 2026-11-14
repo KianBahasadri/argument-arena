@@ -162,7 +162,8 @@ class Profiles:
             competitive = await unit.document("ratings", actor.guild, {})
             result = {
                 "current_competitive_rating": competitive.get(user),
-                "record_command": "/match history (public records are separate from "
+                "record_command": "/profile → Public match history "
+                "(public records are separate from "
                 "generated insights)",
                 "user": user,
                 "preferences": prefs,
@@ -204,7 +205,8 @@ class Profiles:
                     {
                         "name": entry.name,
                         "reference": entry.reference,
-                        "command": f"/train fallacy name:{entry.name}",
+                        "command": f"/train → Fallacy library → {entry.name}"
+                        " → Practice this fallacy",
                     }
                     for name in sorted(set(practice))
                     if prefs["recommendations"] and (entry := find_fallacy(name))

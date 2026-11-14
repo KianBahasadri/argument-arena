@@ -37,16 +37,15 @@ async def test_setup_sync_and_reconnect_lifecycle(tmp_path):
         assert client.intents.guild_reactions and not client.intents.members
         commands = client.tree.get_commands(guild=client.guild)
         assert {command.name for command in commands} == {
-            "diagnostic",
+            "challenge",
             "match",
             "profile",
             "train",
-            "settings",
-            "setup",
+            "help",
+            "admin",
             "leaderboard",
         }
         assert commands[0].guild_only
-        assert commands[0].default_permissions.administrator
     assert client.is_closed()
     assert not client.gateway_ready
 
@@ -71,8 +70,7 @@ async def test_diagnostic_checks_storage_and_permissions(tmp_path):
         await client.diagnostic(denied)
         storage.check.assert_not_awaited()
         allowed = interaction()
-        command = client.tree.get_command("diagnostic", guild=client.guild)
-        await command._do_call(allowed, {})
+        await client.diagnostic(allowed)
         storage.check.assert_awaited_once()
         assert allowed.response.send_message.call_args.kwargs["ephemeral"] is True
         assert "storage OK" in allowed.response.send_message.call_args.args[0]

@@ -250,37 +250,21 @@ Users can view the evidence behind a profile observation, correct a mischaracter
 
 ## Command surface
 
-The commands below are implemented. Buttons, select menus and forms expose settings. See [exact command arguments and additional controls](docs/commands.md).
+Start with `/help` in Discord. Use `/challenge @member`, fill in a topic and both positions, then review presets, optional features, deadlines, limits and ranked play in private menus. Send the challenge when ready. Both members use `/match` to review and confirm the same settings revision; edits clear both confirmations. A debate channel appears only after both agree. Unsent setup expires after 15 minutes without creating a match or channel.
 
 | Command | Purpose |
 | --- | --- |
-| `/setup` | Configure categories, server defaults, and moderator roles |
-| `/settings server` | View or change server-level configuration |
-| `/match challenge @member topic:<topic>` | Propose a match from a channel or thread |
-| `/match accept <id>` / `/match decline <id>` | Respond to a challenge |
-| `/match settings <id>` | Review or propose changes to the match configuration |
-| `/match status <id>` | Show participants, rules, next speaker, and deadline |
-| `/match submit` | Submit a completed turn when turn-based play is enabled |
-| `/match claims` | View claims, responses, and research status |
-| `/match check <claim-id>` | Request an enabled on-demand fact check |
-| `/match dispute <claim-or-result-id>` | Challenge an extraction, fact check, or judgment |
-| `/match pause` / `/match resume` | Request an agreed pause or resume play |
-| `/match concede` | Concede the match |
-| `/match draw` | Propose an agreed draw |
-| `/match finish` | Propose ending the argument and starting enabled final judging |
-| `/match cancel <id>` | Cancel through the allowed participant or staff workflow |
-| `/match result <id>` | Retrieve a completed result and feedback |
-| `/match archive <id>` | Let authorized staff archive a finished channel manually |
-| `/leaderboard` | View competitive standings and filters |
-| `/profile view [member]` | View an available debate profile and history |
-| `/profile settings` | Manage profile analysis and visibility preferences |
-| `/profile remove-insights` | Request removal of generated tendency analysis |
-| `/train start` | Start a puzzle or training battle |
-| `/train fallacy <name>` | Practice a selected fallacy |
-| `/train hint` | Request a hint in the current exercise |
-| `/train progress` | View training results and suggested practice |
+| `/challenge` | Choose an opponent; complete topic, positions and settings in forms and menus |
+| `/match` | Select a debate; view status, submit a turn, negotiate controls, end it, inspect claims/results or moderate |
+| `/train` | Exercises, selected fallacies, bot battles, answers, hints and progress |
+| `/profile` | Member profiles, public match history, privacy preferences and insight corrections/removal |
+| `/leaderboard` | Competitive standings with interactive filters |
+| `/admin` | Authorized category/output setup, defaults, policy, diagnostics, audit and match moderation |
+| `/help` | Match quick start and detailed guidance through a topic menu |
 
-Read-only spectators should still be able to invoke permitted application commands, including issuing a new challenge. Interaction responses and settings forms must respect the main-channel conversation rules.
+All responses and panels are ephemeral and work in server channels and discussion threads. The match menu opens the local debate automatically or offers a paged selector; routine actions need no IDs or JSON. Read-only spectators can still invoke permitted application commands.
+
+Concede now records an immediate loss after confirmation. Propose finish, draw or cancellation requires the opponent's agreement; finish runs enabled final judging. Agreed round/message limits finish automatically. By default, a designated next speaker has 24 hours to respond before forfeiting; flexible order has no clock until a speaker request is agreed. Pause/resume preserves remaining time. See [commands and menus](docs/commands.md) for permissions, exact workflow and the before/after inventory: 43 command actions become seven entry points.
 
 ## Implementation phases
 

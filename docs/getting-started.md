@@ -57,7 +57,7 @@ argument-arena run
 
 The environment is the configuration interface; `.env` is loaded by the shell, not automatically by the package. `--data-dir PATH` is a global option for offline maintenance and health probes, placed before the subcommand. Running the bot always uses `AA_DATA_DIR`.
 
-`/diagnostic` returns an ephemeral version, storage availability, and Gateway latency. If it is missing, check guild/application identity, invite scopes, and `guild_commands_synchronized` logs. If startup fails, verify inputs with `check-config`, token readability, volume ownership, and the JSON `error_type`/`operation_failed` event. Error responses never echo credentials or request bodies.
+`/admin` → Connection diagnostic returns an ephemeral version, storage availability, and Gateway latency. If it is missing, check guild/application identity, invite scopes, and `guild_commands_synchronized` logs. If startup fails, verify inputs with `check-config`, token readability, volume ownership, and the JSON `error_type`/`operation_failed` event. Error responses never echo credentials or request bodies.
 
 ## Runtime behavior
 
@@ -67,6 +67,6 @@ Every five seconds the event loop checks SQLite and atomically writes a local `h
 
 SIGTERM/SIGINT request shutdown. The supervisor marks readiness false, closes the client with a 15-second timeout, cancels remaining tasks, and closes SQLite before releasing the data-directory lock. The deployment gives Docker 30 seconds to stop it. A crash releases the OS lock automatically. Keep one authoritative installation, Terraform state, token, and data volume; a lock cannot coordinate unrelated copies using different directories or hosts.
 
-After login, run `/setup`, then use `/match challenge` and review both participants' settings before acceptance. Provider configuration is optional for starting the bot, but required for enabled LLM/research features to produce results. Mount keys using the same file-only pattern as the Discord token. Models can be selected for each analysis role in server `llm_models`; a match can select its accepted judge model. See [provider boundaries](product.md#research-and-model-boundaries).
+After login, run `/admin` → Set up routes, then use `/challenge @member` and review both participants' settings before acceptance. Provider configuration is optional for starting the bot, but required for enabled LLM/research features to produce results. Mount keys using the same file-only pattern as the Discord token. All LLM features, including judging, use the single operator Go model; other model selections report unavailable. See [provider boundaries](product.md#research-and-model-boundaries).
 
 See [deployment and recovery](deployment.md) and the [storage/extension contract](architecture.md).

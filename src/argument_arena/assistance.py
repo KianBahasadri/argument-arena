@@ -393,7 +393,8 @@ class Assistance:
             await unit.notice(
                 match,
                 f"dispute-notice:{match_id}:{target}:{self.arena.clock()}",
-                f"Dispute by {actor.id} on {target}: {reason}. Staff can inspect /match audit.",
+                f"Dispute by {actor.id} on {target}: {reason}. "
+                "Staff can inspect /match → Moderation → Audit.",
                 self.arena.clock(),
             )
             return (
@@ -569,7 +570,8 @@ class Assistance:
                 await unit.notice(
                     match,
                     f"check-ready:{job['id']}",
-                    f"Check {claim['id']}: {current['status']}. Use /match claims for"
+                    f"Check {claim['id']}: {current['status']}. "
+                    "Open /match → Claims and evidence for"
                     f" evidence and history.",
                     self.arena.clock(),
                 )
@@ -713,7 +715,7 @@ def validate_judgment(match, messages, claims, raw):
             {
                 "fallacy": entry.name,
                 "reference": entry.reference,
-                "command": f"/train fallacy name:{entry.name}",
+                "command": f"/train → Fallacy library → {entry.name} → Practice this fallacy",
             }
             for name in detail["practice"]
             if (entry := find_fallacy(name))

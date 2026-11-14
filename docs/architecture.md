@@ -3,7 +3,8 @@
 ## Layout
 
 - `src/argument_arena/config.py`: non-secret environment settings and file-only token loading.
-- `client.py`, `commands.py`: guild-restricted Gateway, slash commands, ephemeral responses and settings UI.
+- `client.py`, `commands.py`: guild-restricted Gateway and seven slash-command entry points.
+- `ui.py`, `match_ui.py`, `settings_ui.py`, `member_ui.py`, `admin_ui.py`, `help_ui.py`: owner/server-scoped ephemeral panels, private challenge drafts, typed forms and navigation. Services recheck authority and accepted revisions; no schema migration is needed.
 - `settings.py`, `arena.py`: validated policy, authorization and transactional match state machine.
 - `repository.py`, `worker.py`: durable units of work, unique leased jobs and supervised scheduling.
 - `assistance.py`, `providers.py`: grounded claim graphs, evidence histories, JSON LLM/search adapters and judging.
