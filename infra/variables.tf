@@ -49,3 +49,13 @@ variable "pull_secret" {
     error_message = "Use a valid Kubernetes Secret name."
   }
 }
+
+variable "credentials_revision" {
+  type        = number
+  default     = 1
+  description = "Increment after changing files in .secrets/ to upload credentials and restart the bot."
+  validation {
+    condition     = var.credentials_revision >= 1 && floor(var.credentials_revision) == var.credentials_revision
+    error_message = "Use a positive integer credential revision."
+  }
+}

@@ -13,6 +13,7 @@ def render(
     pull_secret="",
     llm_model="gpt-4.1-mini",
     llm_endpoint="https://api.openai.com/v1/chat/completions",
+    credentials_revision=1,
 ):
     pattern = (
         r"(?:[A-Za-z0-9._:-]+/)*[A-Za-z0-9._-]+"
@@ -20,6 +21,8 @@ def render(
     )
     if not re.fullmatch(pattern, image) or image.endswith(":latest"):
         raise ValueError("Provide a versioned image tag or digest.")
+    if type(credentials_revision) is not int or credentials_revision < 1:
+        raise ValueError("Use a positive integer credential revision.")
     if pull_secret and not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", pull_secret):
         raise ValueError("Invalid registry Secret name.")
     if not re.fullmatch(r"[1-9][0-9]{0,19}", guild_id) or not int(guild_id) < 2**64:
@@ -42,6 +45,7 @@ def render(
         "pull_secret": pull_secret,
         "llm_model": llm_model,
         "llm_endpoint": llm_endpoint,
+        "credentials_revision": str(credentials_revision),
     }.items():
         template = template.replace("${" + key + "}", value)
     if "${" in template or "%{" in template:
@@ -56,6 +60,7 @@ def main():
     parser.add_argument("--pull-secret", default="")
     parser.add_argument("--llm-model", default="gpt-4.1-mini")
     parser.add_argument("--llm-endpoint", default="https://api.openai.com/v1/chat/completions")
+    parser.add_argument("--credentials-revision", type=int, default=1)
     args = parser.parse_args()
     try:
         sys.stdout.write(render(**vars(args)))

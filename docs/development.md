@@ -20,7 +20,7 @@ A separate **Publish container image** job depends on successful validation for 
 
 For a focused Python-only iteration, `python -m pytest` and `python -m ruff check src tests scripts` do not need Terraform or Docker. Run the complete entry point before delivery.
 
-The Guaranine target in `infra/` also receives Terraform formatting, isolated initialization and schema validation. Infrastructure tests parse its rendered YAML and exercise the installed configuration and health commands against the declared mounts and probes. These checks need no kubeconfig or live cluster; see the [cluster walkthrough](guaranine.md) for operator deployment.
+The Guaranine target in `infra/` also receives Terraform formatting, isolated initialization and schema validation. Validation checks Secret file permissions through Terraform's actual YAML decoder, since YAML versions interpret leading-zero numbers differently. Infrastructure tests parse the rendered YAML and exercise the installed configuration and health commands against the declared mounts and probes. These checks need no kubeconfig or live cluster; see the [cluster walkthrough](guaranine.md) for operator deployment.
 
 ## Dependency updates
 

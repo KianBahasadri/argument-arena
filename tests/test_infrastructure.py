@@ -69,6 +69,15 @@ class InfrastructureTests(unittest.TestCase):
         self.assertEqual(egress[1]["ports"], [{"protocol": "TCP", "port": 443}])
         self.assertIn("100.64.0.0/10", egress[1]["to"][0]["ipBlock"]["except"])
 
+    def test_credential_rotation_changes_the_pod_template(self):
+        original = self.resources()["Deployment/bot"]["spec"]["template"]
+        rotated = self.resources(credentials_revision=2)["Deployment/bot"]["spec"]["template"]
+        self.assertNotEqual(original["metadata"], rotated["metadata"])
+        self.assertEqual(original["spec"], rotated["spec"])
+        for revision in (0, -1, 1.5, True, "2\n  invalid: true"):
+            with self.subTest(revision=revision), self.assertRaises(ValueError):
+                self.resources(credentials_revision=revision)
+
     def test_private_images_and_template_injection_validation(self):
         pod = self.resources(pull_secret="ghcr-pull")["Deployment/bot"]["spec"]["template"]["spec"]
         self.assertEqual(pod["imagePullSecrets"], [{"name": "ghcr-pull"}])

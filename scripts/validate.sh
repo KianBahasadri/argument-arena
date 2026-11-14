@@ -27,8 +27,16 @@ terraform -chdir="$validation_dir" test -no-color
 # Check the Guaranine target without reading operator kubeconfig, tfvars or state.
 mkdir "$validation_dir/kubernetes"
 cp infra/*.tf infra/.terraform.lock.hcl infra/resources.yaml.tftpl "$validation_dir/kubernetes/"
-terraform -chdir=infra fmt -check
+terraform -chdir=infra fmt -check -recursive
 terraform -chdir="$validation_dir/kubernetes" init -backend=false -input=false -lockfile=readonly -no-color
 terraform -chdir="$validation_dir/kubernetes" validate -no-color
+# Check the actual YAML decoder: YAML 1.1 and 1.2 disagree about leading-zero numbers.
+credential_mode="$(terraform -chdir="$validation_dir/kubernetes" console -no-color \
+  -var='image=example:1' -var='guild_id=123' \
+  <<<'one([for volume in local.resources["Deployment/bot"].spec.template.spec.volumes : volume.secret.defaultMode if volume.name == "credentials"])')"
+if [[ "$credential_mode" != 288 ]]; then
+  printf '%s\n' 'Secret files must use mode 0440 (decimal 288) after Terraform decodes the YAML.' >&2
+  exit 1
+fi
 "$PYTHON" -m build --no-isolation --outdir "$validation_dir/dist"
 "$PYTHON" scripts/check-container.py

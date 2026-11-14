@@ -35,6 +35,8 @@ spec:
     metadata:
       labels:
         app: argument-arena
+      annotations:
+        argument-arena/credentials-revision: "${credentials_revision}"
     spec:
       automountServiceAccountToken: false
 %{ if pull_secret != "" ~}
@@ -115,7 +117,7 @@ spec:
         - name: credentials
           secret:
             secretName: bot-credentials
-            defaultMode: 0440
+            defaultMode: 288 # 0440 in octal; decimal keeps YAML decoders consistent.
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
