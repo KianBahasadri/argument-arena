@@ -135,9 +135,7 @@ class DiscordGateway:
             "reason": f"Closed debate {match['id']}",
         }
         if job["data"].get("move"):
-            route = {"forfeit": "forfeited", "cancelled": "cancelled"}.get(
-                result["outcome"], "completed"
-            )
+            route = "cancelled" if result["outcome"] == "cancelled" else "completed"
             category_id = config["categories"][route]
             if category_id:
                 category = guild.get_channel(int(category_id))
@@ -310,7 +308,12 @@ class DiscordGateway:
             config = await unit.document("guild", actor.guild)
             require_staff(actor, config or {})
             if match["state"] != "closed":
-                raise ArenaError("Only completed matches can be archived.")
+                raise ArenaError(
+                    "Only completed matches can be archived. This debate is still pending, "
+                    "active, paused or judging. Check `/match` → Status and finish or resolve"
+                    " it first; a moderator can then choose Archive from the match's staff "
+                    "controls."
+                )
             await unit.job(
                 f"manual-archive:{match_id}:{self.arena.clock()}",
                 "archive",

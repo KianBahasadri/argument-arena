@@ -5,6 +5,7 @@ from copy import deepcopy
 import discord
 
 from argument_arena.arena import participant
+from argument_arena.messages import ADMIN_REQUIRED, RULES_LOCKED
 from argument_arena.settings import ENUMS, WEIGHTS, ArenaError, match_settings, ranked_settings
 from argument_arena.ui import Field, Form, Panel, actor, number, respond, text
 
@@ -65,7 +66,11 @@ class SettingsTarget:
     async def update(self, interaction, patch, revision):
         who = actor(interaction)
         if who.id != self.owner or who.guild != str(self.client.config.guild_id):
-            raise ArenaError("Open your own settings panel in the configured server.")
+            raise ArenaError(
+                "This settings panel belongs to another member or server, so this edit cannot"
+                " be applied. Open your own `/match` or challenge setup in the configured "
+                "server, then choose Features to make an authorized change."
+            )
         if self.draft is not None:
             async with self.draft.lock:
                 self.draft.check(revision)
@@ -93,9 +98,9 @@ class SettingsTarget:
         if not self.server and self.draft is None:
             participant(current, actor(interaction))
             if current["state"] != "challenge":
-                raise ArenaError("Accepted rules are locked; you can still view the settings.")
+                raise ArenaError(RULES_LOCKED)
         if self.server and not actor(interaction).admin:
-            raise ArenaError("Administrator permission required.")
+            raise ArenaError(ADMIN_REQUIRED)
         return current
 
 
@@ -158,7 +163,11 @@ class FeatureView(Panel):
             (".".join(path), value) for path, value in parameters(current["settings"][self.feature])
         )
         if name not in fields:
-            raise ArenaError("Unknown parameter. Reopen settings.")
+            raise ArenaError(
+                "This parameter is not available in the current feature settings. Reopen "
+                "Features from the latest match, draft or admin panel and select a parameter "
+                "from its menu. An older panel may refer to rules that have since changed."
+            )
         value = fields[name]
 
         async def save(request, new):
@@ -203,7 +212,10 @@ class FeatureView(Panel):
                 parts = raw.split()
                 if len(parts) != len(value):
                     raise ArenaError(
-                        "Supply six integer weights, separated by spaces, totaling 100."
+                        "Enter six whole-number weights separated by spaces, in this order: "
+                        "reasoning, evidence, accuracy, engagement, clarity and rules. They "
+                        "must total 100; for example, 25 20 15 20 10 10. Reopen the weights "
+                        "form and replace all six values together."
                     )
                 parsed = {key: number(item, key) for key, item in zip(WEIGHTS, parts, strict=True)}
             elif isinstance(value, list):

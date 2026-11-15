@@ -7,6 +7,7 @@ import discord
 from argument_arena.competition import leaderboard
 from argument_arena.curriculum import LIBRARY
 from argument_arena.match_ui import show_picker
+from argument_arena.messages import job_guidance
 from argument_arena.settings import ArenaError
 from argument_arena.ui import Confirm, Field, Form, Panel, actor, number, respond, safe, text
 
@@ -20,7 +21,11 @@ async def training_current(client, who):
                 "SELECT data,state,error FROM jobs WHERE kind='train_grade' AND state!='done'"
             )
         latest["jobs"] = [
-            {"state": row["state"], "status": row["error"]}
+            {
+                "state": row["state"],
+                "status": row["error"],
+                "explanation": job_guidance(row["error"], row["state"], training=True),
+            }
             for row in jobs
             if json.loads(row["data"])["session"] == latest["id"]
         ]
@@ -63,7 +68,11 @@ class TrainingView(Panel):
 
     async def selected(self, interaction, action):
         if action not in self.options:
-            raise ArenaError("Reopen /train for available actions.")
+            raise ArenaError(
+                "This training action is not available in the panel you opened. Your exercise"
+                " or grading state may have changed. Reopen `/train` to see Current exercise "
+                "and choose an action from the latest menu."
+            )
         if action == "start":
             panel = Panel(self.client, self.owner)
 
@@ -155,7 +164,11 @@ async def show_training(interaction, client):
                 name="Generation status", value=text(latest["generation"], 500), inline=False
             )
         if latest.get("jobs"):
-            embed.add_field(name="Grading status", value=text(latest["jobs"], 1000), inline=False)
+            embed.add_field(
+                name="Grading status",
+                value="\n\n".join(job["explanation"] for job in latest["jobs"])[:1024],
+                inline=False,
+            )
         embed.set_footer(
             text=f"{latest['mode']} · difficulty {latest['difficulty']} · turn {latest['turn']}"
         )
@@ -276,7 +289,12 @@ class ProfileView(Panel):
 
     async def selected(self, interaction, action):
         if action not in self.choices:
-            raise ArenaError("Open your own /profile panel for private controls.")
+            raise ArenaError(
+                "Privacy, corrections and insight removal can only be managed for your own "
+                "profile. Run `/profile` yourself and select your own profile to open those "
+                "controls. Viewing another member's panel does not grant access to their "
+                "private information or preferences."
+            )
         if action == "view":
             await safe(interaction, self.client.profiles.view(actor(interaction), self.user))
         elif action == "history":
@@ -404,7 +422,11 @@ async def show_history(interaction, client, user, *, topic="", days=0):
         async def submitted(item, values):
             count = number(values["days"], "Days")
             if count < 0:
-                raise ArenaError("Days must be nonnegative; 0 means all time.")
+                raise ArenaError(
+                    "The history time filter must be zero or a positive whole number of days."
+                    " Enter 30 for the last 30 days, or 0 for all time, then submit the "
+                    "filter form again."
+                )
             await show_history(item, client, user, topic=values["topic"], days=count)
 
         await request.response.send_modal(
@@ -442,7 +464,12 @@ async def show_leaderboard(
             period = number(values["days"], "Days")
             minimum = number(values["minimum"], "Minimum matches")
             if period < 0 or minimum < 1:
-                raise ArenaError("Days must be nonnegative; minimum matches must be at least one.")
+                raise ArenaError(
+                    "The leaderboard filters need a nonnegative whole number of days and at "
+                    "least one minimum match. For example, enter 30 days and 1 minimum match,"
+                    " or use 0 days for all time. Correct those fields and submit the filter "
+                    "form again."
+                )
             await show_leaderboard(
                 item,
                 client,

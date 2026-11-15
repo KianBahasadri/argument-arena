@@ -27,16 +27,24 @@ class Training:
             or not 1 <= len(topic) <= 100
         ):
             raise ArenaError(
-                "Choose spot, selected, mixed, battle, repair or sound; difficulty 1–3;"
-                " a short topic."
+                "The practice settings are incomplete or invalid. Open `/train` → Start "
+                "practice, choose one of its six modes and a difficulty from 1 to 3, then "
+                "enter a topic of 1–100 characters. Training is available to human server "
+                "members."
             )
         entry = find_fallacy(fallacy) if fallacy else None
         if fallacy and entry is None:
             raise ArenaError(
-                "Unknown fallacy. Open /train → Fallacy library for supported references."
+                "That fallacy is not in the supported practice library. Open `/train` → "
+                "Fallacy library and choose an entry there, or start a different practice "
+                "mode without selecting a specific fallacy."
             )
         if mode == "selected" and entry is None:
-            raise ArenaError("Selected practice requires a fallacy name.")
+            raise ArenaError(
+                "Choose a fallacy before starting selected practice. Open `/train` → Fallacy "
+                "library, select the reasoning error you want to practice, then choose the "
+                "difficulty and topic. Mixed practice can choose a fallacy for you instead."
+            )
         async with self.repo.unit() as unit:
             active = await unit.one(
                 "SELECT id FROM training WHERE guild=? AND user_id=? AND state IN"
@@ -45,7 +53,10 @@ class Training:
             )
             if active:
                 raise ArenaError(
-                    "Finish the current exercise or choose Stop session in /train first."
+                    "Your current exercise is active or awaiting grading. Open `/train` →"
+                    " Current exercise to continue it or check its grading status. To start "
+                    "something different, choose Stop session first; completed practice stays"
+                    " in your progress."
                 )
             progress = await unit.document(
                 "training_progress", f"{actor.guild}:{actor.id}", {"attempts": []}
@@ -171,7 +182,11 @@ class Training:
             (actor.guild, actor.id),
         )
         if not row:
-            raise ArenaError("No active training. Open /train → Start practice.")
+            raise ArenaError(
+                "No active training session was found for you in this server. Open `/train` →"
+                " Start practice and choose a mode, difficulty and topic before answering or "
+                "requesting a hint. Your completed sessions remain available under Progress."
+            )
         return json.loads(row["data"])
 
     async def current(self, actor):
@@ -190,14 +205,20 @@ class Training:
     async def answer(self, actor, answer):
         if not 10 <= len(answer) <= 4000:
             raise ArenaError(
-                "Give an explanation in 10–4000 characters, rather than a label alone."
+                "Your answer must explain your reasoning in 10–4000 characters. Identify the "
+                "relevant part of the argument and explain why it is sound or flawed; a label"
+                " alone is not enough. Reopen `/train` → Answer exercise and submit the "
+                "explanation."
             )
         async with self.repo.unit() as unit:
             session = await self._current(unit, actor)
             if session["state"] == "grading":
                 raise ArenaError(
-                    "Your answer is awaiting grading. Open /train for status or "
-                    "Retry failed grading."
+                    "Your previous answer is saved and still awaiting grading, so another "
+                    "answer cannot be submitted yet. Open `/train` → Current exercise to see "
+                    "the grading status. If grading has failed, resolve the reported cause "
+                    "and choose Retry failed grading; you do not need to retype the saved "
+                    "answer."
                 )
             session["state"], session["pending_answer"] = "grading", answer
             digest = hashlib.sha256(answer.encode()).hexdigest()[:16]
@@ -293,7 +314,10 @@ class Training:
                 )
             except (ProviderError, ArenaError):
                 next_exercise["generation"] = (
-                    "Original curriculum fallback; dynamic battle generation unavailable."
+                    "Original curriculum fallback; dynamic battle generation unavailable. "
+                    "The next turn uses a prepared exercise so practice can continue. "
+                    "If generated bot turns keep failing, ask the operator to check the "
+                    "OpenCode Go integration; no other model or provider is used."
                 )
         async with self.repo.unit() as unit:
             latest = await unit.one("SELECT data,state FROM training WHERE id=?", (session["id"],))

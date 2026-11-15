@@ -27,13 +27,27 @@ class Profiles:
             prefs = await unit.document("profile_prefs", key, preferences())
             if patch:
                 if set(patch) - {"analysis", "visibility", "training", "recommendations"}:
-                    raise ArenaError("Unknown profile preference.")
+                    raise ArenaError(
+                        "This profile preference is not supported. Reopen your own `/profile`"
+                        " → Privacy and consent and select an option from its current menu. "
+                        "If a fresh menu still fails, ask the bot operator to check the "
+                        "deployment."
+                    )
                 for name, value in patch.items():
                     if name == "visibility":
                         if value not in {"private", "public"}:
-                            raise ArenaError("Choose private or public visibility.")
+                            raise ArenaError(
+                                "Profile visibility must be private or public. Open your own "
+                                "`/profile` → Privacy and consent and choose the visibility "
+                                "you want. Public visibility shares the profile view; other "
+                                "privacy and consent switches remain separate choices."
+                            )
                     elif type(value) is not bool:
-                        raise ArenaError("Profile switches must be true or false.")
+                        raise ArenaError(
+                            "This profile preference must be on or off. Reopen your own "
+                            "`/profile` → Privacy and consent and use its switches to choose "
+                            "a value, then review the updated preferences."
+                        )
                 if patch.get("analysis") and not prefs["analysis"]:
                     prefs["since"] = self.arena.clock()
                 prefs.update(patch)
@@ -141,7 +155,12 @@ class Profiles:
         async with self.repo.unit() as unit:
             prefs = await unit.document("profile_prefs", key, preferences())
             if user != actor.id and prefs["visibility"] != "public":
-                raise ArenaError("This profile is private.")
+                raise ArenaError(
+                    "This profile is private, so its generated insights and private training "
+                    "details are visible only to its owner. You can still open `/profile`, "
+                    "choose that member and select Public match history. Only the owner can "
+                    "change profile visibility in Privacy and consent."
+                )
             rows = await unit.rows("SELECT id,data FROM documents WHERE kind='insight'")
             insights = [json.loads(r["data"]) for r in rows if r["id"].startswith(key + ":")]
             insights = sorted(
@@ -238,12 +257,23 @@ class Profiles:
 
     async def correct(self, actor, match_id, note, exclude=False):
         if not 5 <= len(note) <= 2000:
-            raise ArenaError("Provide a correction of 5–2000 characters.")
+            raise ArenaError(
+                "Your insight correction needs a note of 5–2000 characters. Explain what the "
+                "generated observation got wrong or why you want it excluded, then submit the"
+                " correction form again. This changes your insight record, not the public "
+                "match outcome."
+            )
         key = f"{actor.guild}:{actor.id}:{match_id}"
         async with self.repo.unit() as unit:
             insight = await unit.document("insight", key)
             if not insight:
-                raise ArenaError("No generated observation for this match.")
+                raise ArenaError(
+                    "No generated profile observation exists for you from this match. It may "
+                    "still be pending, analysis may not have been enabled, or the insight may"
+                    " have been removed. Open `/profile` → View profile to review available "
+                    "insights and choose a different match to correct. Public match results "
+                    "are separate records."
+                )
             insight["user_correction"] = {"note": note, "at": self.arena.clock(), "by": actor.id}
             insight["excluded"] = exclude
             await unit.save("insight", key, insight)

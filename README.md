@@ -38,14 +38,14 @@ The sections below define the delivered behavior. The [product policy](docs/prod
 5. The participants argue. The audience watches, reacts, and uses public threads for side conversations. Enabled LLM features identify claims, research evidence, moderate, and provide updates.
 6. The match ends through an agreed finish, concession, completed rounds, inactivity forfeit, or moderator intervention.
 7. The bot publishes the result and any enabled judging report, updates eligible records and leaderboards, and generates enabled profile insights.
-8. If automatic archival is enabled, the bot moves the channel to the configured completed, forfeited, or cancelled category and applies the agreed archive policy.
+8. If automatic archival is enabled, the bot moves the channel to the configured completed (including forfeits) or cancelled category and applies the agreed archive policy.
 
 Participants can start a new match from any side discussion without ending or changing the original match. The new channel links back to its originating thread.
 
 ## Server setup and administration
 
 - Administrator-based installation for the intended server, with command access restricted by role and action.
-- A setup command to choose active, completed, forfeited, and cancelled match categories; announcement and results channels; and moderator roles.
+- A setup command to choose active, completed, and cancelled match categories; announcement and results channels; and moderator roles.
 - Configurable channel names, match IDs, category routing, and archive behavior.
 - Server defaults and reusable match presets, such as casual, ranked, fact checking off, or coaching on.
 - Staff controls to pause, resume, cancel, close, or review a match and correct a recorded result.

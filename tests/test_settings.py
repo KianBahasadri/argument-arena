@@ -81,3 +81,15 @@ def test_server_validation(key, value):
     config[key] = value
     with pytest.raises(ArenaError):
         validate_server(config)
+
+
+async def test_legacy_category_settings_keep_existing_routes_without_rewriting_on_read(product):
+    config = await product.arena.config("123")
+    config["categories"]["forfeited"] = "99"
+    async with product.arena.repo.unit() as unit:
+        await unit.save("guild", "123", config)
+    current = await product.arena.config("123")
+    assert current["categories"] == {"active": "1", "completed": "2", "cancelled": "4"}
+    async with product.arena.repo.unit() as unit:
+        saved = await unit.document("guild", "123")
+        assert saved == config

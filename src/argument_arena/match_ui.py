@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import discord
 
 from argument_arena.arena import require_staff, validate_debate
+from argument_arena.messages import MISSING_ROUTES, PROPOSAL_CHANGED, job_guidance
 from argument_arena.repository import encode
 from argument_arena.settings import ArenaError, match_settings
 from argument_arena.settings_ui import DEPENDENCIES, FEATURES, SettingsTarget, show_settings
@@ -115,9 +116,19 @@ class Draft:
 
     def check(self, revision=None):
         if self.state != "editing" or time.monotonic() - self.created >= 900:
-            raise ArenaError("This setup was sent, cancelled or expired. Start a new /challenge.")
+            raise ArenaError(
+                "This setup was sent, cancelled or expired and can no longer be changed. If "
+                "you already sent it, open `/match` to find the saved challenge. Unsent "
+                "drafts expire after 15 minutes or a bot restart and create no match channel;"
+                " start a new `/challenge @member` to try again."
+            )
         if revision is not None and revision != self.revision:
-            raise ArenaError("Your draft changed. Review its newest summary before continuing.")
+            raise ArenaError(
+                "Your draft changed after this panel was opened, so this action was not "
+                "applied to an older version. Use the newest setup summary to review the "
+                "topic, positions and Features before sending. If you no longer have that "
+                "panel, start a fresh `/challenge @member`."
+            )
 
     def snapshot(self):
         return {
@@ -219,12 +230,20 @@ async def show_draft(interaction, draft):
 async def start_challenge(interaction, client, member):
     who = actor(interaction)
     if member.bot or who.bot or str(member.id) == who.id:
-        raise ArenaError("Choose another human member. Use /train for bot practice.")
+        raise ArenaError(
+            "A challenge needs two different human members of this server. Choose someone "
+            "other than yourself or a bot with `/challenge @member`. For practice against the"
+            " bot, use `/train` → Start practice instead."
+        )
     if getattr(getattr(member, "guild", None), "id", interaction.guild_id) != interaction.guild_id:
-        raise ArenaError("Choose a member of this server.")
+        raise ArenaError(
+            "The selected opponent does not belong to this Discord server. Run `/challenge "
+            "@member` here and choose a current server member from Discord's suggestions; "
+            "matches cannot span different servers."
+        )
     config = await client.arena.config(who.guild)
     if not config["categories"]["active"]:
-        raise ArenaError("An administrator must open /admin → Set up routes first.")
+        raise ArenaError(MISSING_ROUTES)
     draft = Draft(
         client,
         who.id,
@@ -334,7 +353,10 @@ class MatchView(Panel):
             current, actor(interaction), config, self.client.arena.clock()
         ):
             raise ArenaError(
-                "This action is no longer available. Reopen /match for current controls."
+                "This action is no longer available with the match's current state or your "
+                "permissions. The match may have advanced, closed, or changed since you "
+                "opened this panel. Reopen `/match` to see current controls and use Status to"
+                " check what happened."
             )
         if action == "settings":
             await show_settings(
@@ -389,6 +411,8 @@ class MatchView(Panel):
                     "SELECT kind,state,error,due FROM jobs WHERE match_id=? AND state!='done'",
                     (current["id"],),
                 )
+            for job in jobs:
+                job["explanation"] = job_guidance(job["error"], job["state"])
             await respond(
                 interaction,
                 {
@@ -456,7 +480,7 @@ class MatchView(Panel):
         elif action == "agree":
             proposal = self.match.get("proposal")
             if not proposal or proposal != current["proposal"]:
-                raise ArenaError("The proposal changed. Review the newest /match summary.")
+                raise ArenaError(PROPOSAL_CHANGED)
             await self.lifecycle(
                 interaction, current, proposal["action"], proposal["data"], proposal=proposal
             )
@@ -661,7 +685,11 @@ async def show_claims(interaction, client, match, page=0):
         claim = await client.arena.repo.claim(claim_id, str(request.guild_id))
         current = await client.arena.repo.match(match["id"], str(request.guild_id))
         if claim["match"] != current["id"]:
-            raise ArenaError("Claim belongs to another match.")
+            raise ArenaError(
+                "This claim belongs to another match and cannot be accessed through this "
+                "panel. Reopen `/match`, select the debate you want, and open its Claims and "
+                "evidence list to choose a claim from that debate."
+            )
         actions = Panel(client, str(request.user.id))
         if actor(request).id in current["players"]:
             if (

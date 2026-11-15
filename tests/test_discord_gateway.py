@@ -140,6 +140,38 @@ async def test_archival_routes_and_never_syncs_category_permissions(product, mon
     assert (await product.arena.repo.match(match["id"]))["archived"]
 
 
+@pytest.mark.parametrize(
+    "outcome,winner,category",
+    [("forfeit", B.id, 2), ("concession", B.id, 2), ("cancelled", None, 4)],
+)
+async def test_forfeits_share_completed_even_with_a_different_legacy_route(
+    product, monkeypatch, outcome, winner, category
+):
+    config = await product.arena.config(A.guild)
+    config["categories"]["forfeited"] = "99"
+    async with product.arena.repo.unit() as unit:
+        await unit.save("guild", A.guild, config)
+    match = await active(product.arena)
+    await product.arena.close_match(
+        ADMIN, match["id"], outcome, winner, "Reviewed by server staff."
+    )
+    guild, _, _ = fixture_guild()
+
+    class Category:
+        def __init__(self, id):
+            self.id = id
+
+    monkeypatch.setattr(discord, "CategoryChannel", Category)
+    guild.get_channel = lambda id: Category(id)
+    channel = SimpleNamespace(edit=AsyncMock(), threads=[])
+    gateway = DiscordGateway(SimpleNamespace(get_guild=lambda _: guild), product.arena)
+    gateway.channel = AsyncMock(return_value=channel)
+    await gateway.archive({"match_id": match["id"], "data": {"move": True}})
+    args = channel.edit.call_args.kwargs
+    assert args["category"].id == category and args["sync_permissions"] is False
+    assert (await product.arena.result(match["id"], A.guild))["outcome"] == outcome
+
+
 async def test_notice_resolves_ambiguous_send_and_suppresses_mentions(product):
     match = await active(product.arena)
     sent = []

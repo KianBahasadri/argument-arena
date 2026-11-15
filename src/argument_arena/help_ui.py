@@ -92,8 +92,9 @@ HELP = {
     ),
     "admin": (
         "Setup and moderation",
-        "Open `/admin` → Set up routes to select active, completed, forfeited and "
-        "cancelled categories. Output channels and moderator roles are optional. "
+        "Open `/admin` → Set up routes to select active, completed and cancelled "
+        "categories. Completed includes concessions and forfeits; the same category "
+        "can serve multiple routes. Output channels and moderator roles are optional. "
         "Administrator is required for configuration, defaults, server audit and "
         "Connection diagnostic. Advanced server policy retains the documented patch"
         " form for unusual policy changes.\n\nConfigured moderators can select a "

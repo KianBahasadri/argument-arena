@@ -4,6 +4,7 @@ import discord
 
 from argument_arena.arena import require_staff
 from argument_arena.match_ui import show_picker, show_staff
+from argument_arena.messages import ADMIN_REQUIRED, ROUTES_HELP
 from argument_arena.settings import ArenaError
 from argument_arena.settings_ui import SettingsTarget, show_settings
 from argument_arena.ui import Field, Form, Panel, actor, parse_json, respond, safe
@@ -11,7 +12,7 @@ from argument_arena.ui import Field, Form, Panel, actor, parse_json, respond, sa
 
 async def administrator(interaction):
     if not actor(interaction).admin:
-        raise ArenaError("Administrator permission required.")
+        raise ArenaError(ADMIN_REQUIRED)
 
 
 async def show_admin(interaction, client):
@@ -45,7 +46,7 @@ async def show_admin(interaction, client):
         if name == "routes":
             await respond(
                 request,
-                "Choose the four match categories, then save. Nothing changes until Save routes.",
+                ROUTES_HELP,
                 RoutesView(client, str(request.user.id)),
             )
         elif name == "outputs":
@@ -90,7 +91,11 @@ async def show_admin(interaction, client):
                 )
             )
         else:
-            raise ArenaError("Unknown administration action.")
+            raise ArenaError(
+                "This administration action is not recognized by the running bot. Reopen "
+                "`/admin` and choose an option from its current menu. If a fresh menu still "
+                "fails, ask the bot operator to check the deployment and logs."
+            )
 
     panel.select(
         "Choose an administration action",
@@ -110,7 +115,7 @@ class RoutesView(Panel):
     def __init__(self, client, owner):
         super().__init__(client, owner)
         self.routes = {}
-        for row, key in enumerate(("active", "completed", "forfeited", "cancelled")):
+        for row, key in enumerate(("active", "completed", "cancelled")):
             picker = discord.ui.ChannelSelect(
                 placeholder=f"{key.title()} matches category",
                 channel_types=[discord.ChannelType.category],
@@ -121,21 +126,35 @@ class RoutesView(Panel):
                 await administrator(interaction)
                 channel = picker.values[0]
                 if channel.guild.id != interaction.guild_id:
-                    raise ArenaError("All routes must belong to this server.")
+                    raise ArenaError(
+                        "The selected category belongs to another Discord server. Choose an "
+                        "existing category from this server in each setup dropdown, then "
+                        "click Save routes. A category is a folder in this server's channel "
+                        "list; one folder can be used for multiple match states."
+                    )
                 self.routes[key] = str(channel.id)
                 await respond(
                     interaction,
-                    f"{key.title()} category selected. Select all four, then Save routes.",
+                    f"{key.title()} category selected. Select all three, then Save routes.",
                 )
 
             picker.callback = chosen
             self.add_item(picker)
-        self.button("Save routes", self.save, style=discord.ButtonStyle.success, row=4)
+        self.button("Save routes", self.save, style=discord.ButtonStyle.success, row=3)
 
     async def save(self, interaction):
         await administrator(interaction)
-        if set(self.routes) != {"active", "completed", "forfeited", "cancelled"}:
-            raise ArenaError("Select all four categories before saving.")
+        if set(self.routes) != {"active", "completed", "cancelled"}:
+            missing = ", ".join(
+                key.title()
+                for key in ("active", "completed", "cancelled")
+                if key not in self.routes
+            )
+            raise ArenaError(
+                f"Category setup is incomplete. Choose {missing} before clicking Save routes. "
+                "You can use the same Discord category in multiple dropdowns. Completed "
+                "also holds forfeited matches. Your existing saved routes have not changed."
+            )
         await safe(
             interaction,
             self.client.arena.setup(actor(interaction), {"categories": dict(self.routes)}),
@@ -158,7 +177,12 @@ class OutputsView(Panel):
             async def chosen(interaction, picker=picker, key=key):
                 await administrator(interaction)
                 if picker.values and picker.values[0].guild.id != interaction.guild_id:
-                    raise ArenaError("All channels must belong to this server.")
+                    raise ArenaError(
+                        "Announcement and results channels must belong to this Discord "
+                        "server. Select a text channel from this server in the dropdown, or "
+                        "leave the optional selection empty to clear it, then click Save "
+                        "outputs."
+                    )
                 self.patch[key] = str(picker.values[0].id) if picker.values else None
                 await respond(
                     interaction,
@@ -174,7 +198,12 @@ class OutputsView(Panel):
         async def selected(interaction):
             await administrator(interaction)
             if any(role.guild.id != interaction.guild_id for role in roles.values):
-                raise ArenaError("All roles must belong to this server.")
+                raise ArenaError(
+                    "Moderator roles must belong to this Discord server. Choose this server's"
+                    " roles from the dropdown, then click Save outputs. Members of those "
+                    "roles will be able to manage matches; server configuration still "
+                    "requires Administrator permission."
+                )
             self.patch["moderator_roles"] = [str(role.id) for role in roles.values]
             await respond(
                 interaction, "Moderator selection saved in this form. Click Save outputs to apply."

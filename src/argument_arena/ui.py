@@ -7,12 +7,13 @@ from dataclasses import dataclass
 
 import discord
 
+from argument_arena.messages import PANEL_EXPIRED, PANEL_OWNER, SERVER_REQUIRED, interaction_error
 from argument_arena.settings import Actor, ArenaError
 
 
 def actor(interaction):
     if interaction.guild_id is None:
-        raise ArenaError("Use this command in the configured server.")
+        raise ArenaError(SERVER_REQUIRED)
     return Actor(
         str(interaction.user.id),
         str(interaction.guild_id),
@@ -29,14 +30,25 @@ def parse_json(value, expected=dict):
             raise ValueError
         return result
     except (ValueError, TypeError):
-        raise ArenaError("Supply valid JSON with the documented structure.") from None
+        raise ArenaError(
+            "The advanced policy could not be read as valid JSON with the documented "
+            'structure. Enter an object such as {"max_concurrent": 3}, using double quotes '
+            "and no trailing commas. Reopen `/admin` → Advanced server policy to correct the "
+            "patch. For categories, channels and feature defaults, use the dedicated menus "
+            "instead."
+        ) from None
 
 
 def number(value, label, *, decimal=False):
     try:
         return float(value) if decimal else int(value)
     except ValueError:
-        raise ArenaError(f"{label} must be a number.") from None
+        kind, example = ("number", "0.85") if decimal else ("whole number", "24")
+        raise ArenaError(
+            f"The {label} field must be a {kind}, such as {example}. "
+            "Enter digits without units or commas, then submit the form again. "
+            "Check the field label for the permitted range."
+        ) from None
 
 
 def text(value, limit=1000):
@@ -84,22 +96,20 @@ class Panel(discord.ui.View):
 
     async def interaction_check(self, interaction):
         if interaction.guild_id != self.client.config.guild_id:
-            await respond(interaction, "This panel belongs to another server.")
+            await respond(interaction, "This panel belongs to another server. " + SERVER_REQUIRED)
             return False
         if str(interaction.user.id) != self.owner:
-            await respond(interaction, "Open your own panel using the slash command.")
+            await respond(interaction, PANEL_OWNER)
             return False
         if self.is_finished():
-            await respond(interaction, "This panel expired. Open the slash command again.")
+            await respond(interaction, PANEL_EXPIRED)
             return False
         return True
 
     async def on_error(self, interaction, error, item):
         await respond(
             interaction,
-            str(error)
-            if isinstance(error, ArenaError)
-            else "The operation failed. Reopen the menu to retry.",
+            str(error) if isinstance(error, ArenaError) else interaction_error(error),
         )
 
     def button(self, label, callback, *, style=discord.ButtonStyle.secondary, row=None):
@@ -176,7 +186,13 @@ class Confirm(Panel):
     async def confirm(self, interaction):
         async with self.lock:
             if self.is_finished():
-                await respond(interaction, "This confirmation has already been used or expired.")
+                await respond(
+                    interaction,
+                    "This confirmation has already been used or expired. The action will not "
+                    "be run again from this button. Reopen the command and check the current "
+                    "status before starting another action; a completed confirmation may "
+                    "already have taken effect.",
+                )
                 return
             self.stop()
             await self.operation(interaction)

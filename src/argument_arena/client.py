@@ -12,11 +12,13 @@ from argument_arena.assistance import Assistance
 from argument_arena.commands import register
 from argument_arena.config import Config
 from argument_arena.discord_gateway import DiscordGateway
+from argument_arena.messages import ADMIN_REQUIRED, SERVER_REQUIRED, interaction_error
 from argument_arena.profiles import Profiles
 from argument_arena.providers import configured_providers
 from argument_arena.settings import ArenaError
 from argument_arena.storage import Storage
 from argument_arena.training import Training
+from argument_arena.ui import respond
 from argument_arena.worker import Worker
 
 logger = logging.getLogger(__name__)
@@ -25,28 +27,17 @@ logger = logging.getLogger(__name__)
 class ArenaCommandTree(app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.guild_id != self.client.config.guild_id:
-            await interaction.response.send_message(
-                "This application is configured for another server.", ephemeral=True
-            )
+            await interaction.response.send_message(SERVER_REQUIRED, ephemeral=True)
             return False
         return True
 
     async def on_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ) -> None:
-        # Never include interaction tokens, user messages, arguments, or error messages in logs.
-        logger.error("command_failed", exc_info=(type(error), error, error.__traceback__))
         original = getattr(error, "original", error)
-        message = (
-            str(original)
-            if isinstance(original, ArenaError)
-            else ("The command failed. Ask the operator to check the bot logs.")
-        )
+        message = str(original) if isinstance(original, ArenaError) else interaction_error(original)
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
-            else:
-                await interaction.response.send_message(message, ephemeral=True)
+            await respond(interaction, message)
         except discord.HTTPException:
             logger.warning("command_error_response_failed")
 
@@ -157,15 +148,13 @@ class ArenaClient(discord.Client):
     async def diagnostic(self, interaction: discord.Interaction) -> None:
         # Enforce permissions at execution too; administrators may edit Discord command defaults.
         if not interaction.permissions.administrator:
-            await interaction.response.send_message(
-                "Administrator permission required.", ephemeral=True
-            )
+            await respond(interaction, ADMIN_REQUIRED)
             return
         await self.storage.check()
         latency = f"{self.latency * 1000:.0f} ms" if math.isfinite(self.latency) else "pending"
-        await interaction.response.send_message(
+        await respond(
+            interaction,
             f"Argument Arena {__version__}: storage OK; Gateway latency {latency}.",
-            ephemeral=True,
         )
 
     async def close(self) -> None:

@@ -5,6 +5,7 @@ import json
 from argument_arena.arena import participant
 from argument_arena.competition import replay
 from argument_arena.curriculum import find_fallacy
+from argument_arena.messages import failure_reason
 from argument_arena.providers import ProviderError, model_response
 from argument_arena.repository import encode
 from argument_arena.settings import ArenaError, server_defaults
@@ -46,7 +47,12 @@ class Assistance:
         async with self.repo.unit() as unit:
             match = await unit.match(match_id, guild)
             if not match["settings"]["claims"]["enabled"]:
-                raise ArenaError("Public claim tracking is disabled for this match.")
+                raise ArenaError(
+                    "Public claim tracking is disabled in this match's agreed Features, so no"
+                    " public claim ledger is available. Review `/match` → Features → Claim "
+                    "ledger. Participants can change it only before both confirm a challenge;"
+                    " accepted rules stay locked."
+                )
             return [
                 json.loads(r["data"])
                 for r in await unit.rows(
@@ -302,21 +308,42 @@ class Assistance:
         async with self.repo.unit() as unit:
             row = await unit.one("SELECT * FROM claims WHERE id=?", (claim_id,))
             if not row:
-                raise ArenaError("Claim not found.")
+                raise ArenaError(
+                    "This claim could not be found in the match records. Reopen `/match` → "
+                    "Claims and evidence and select a claim from the current list. If the "
+                    "ledger is empty, official messages may not have been analyzed yet; check"
+                    " Status for pending or failed work."
+                )
             match = await unit.match(row["match_id"], actor.guild)
             participant(match, actor)
             if not match["settings"]["on_demand"]["enabled"]:
-                raise ArenaError("On-demand checking is disabled.")
+                raise ArenaError(
+                    "On-demand fact-checking is disabled in this match's agreed Features, so "
+                    "a manual check cannot be queued. Review `/match` → Features → Fact-check"
+                    " requests. Participants can enable it before confirming a challenge; "
+                    "accepted rules stay locked."
+                )
             claim = json.loads(row["data"])
             if claim["stale"]:
-                raise ArenaError("This claim's source changed; use its current revision.")
+                raise ArenaError(
+                    "This claim's source changed: its message was edited or deleted. The old "
+                    "evidence is marked stale and cannot be checked as current. Reopen `/match` → "
+                    "Claims and evidence and select a claim from the latest message revision."
+                    " Check Status if reanalysis is still pending."
+                )
             if claim["kind"] != "factual":
                 claim["status"] = "not fact-checkable"
             else:
                 if claim["status"] in {"pending", "researching"}:
                     return claim
                 if match["on_demand_count"] >= match["settings"]["on_demand"]["limit"]:
-                    raise ArenaError("This match's on-demand request limit is exhausted.")
+                    raise ArenaError(
+                        "This match has used all of its agreed on-demand fact-check requests."
+                        " Review the request limit in `/match` → Features → Fact-check "
+                        "requests. This per-match limit does not reset daily; existing "
+                        "evidence remains available, and a participant can still record a "
+                        "dispute."
+                    )
                 match["on_demand_count"] += 1
                 match["analysis_version"] = match.get("analysis_version", 0) + 1
                 claim["status"] = "pending"
@@ -333,9 +360,18 @@ class Assistance:
 
     async def dispute(self, actor, match_id, target, reason, source=None, relation=None):
         if not 10 <= len(reason) <= 3000:
-            raise ArenaError("Explain the dispute in 10–3000 characters.")
+            raise ArenaError(
+                "Your dispute needs an explanation of 10–3000 characters. Describe the "
+                "specific claim or result you disagree with and why, then submit the dispute "
+                "form again. An evidence link is optional; a short label alone does not "
+                "explain the objection."
+            )
         if source and (not source.startswith("https://") or len(source) > 2000):
-            raise ArenaError("Evidence links must be HTTPS URLs of at most 2000 characters.")
+            raise ArenaError(
+                "The evidence link must start with https:// and be no longer than 2000 "
+                "characters. Use a direct link to a public source page, or leave the optional"
+                " link field empty and explain the objection in the dispute text."
+            )
         async with self.repo.unit() as unit:
             match = await unit.match(match_id, actor.guild)
             participant(match, actor)
@@ -356,7 +392,12 @@ class Assistance:
                         "SELECT id FROM claims WHERE id=? AND match_id=?", (relation, match_id)
                     )
                     if not other:
-                        raise ArenaError("Related claim must belong to this match.")
+                        raise ArenaError(
+                            "The related claim must come from this same debate. Reopen this "
+                            "match's Claims and evidence panel, choose the claim you dispute,"
+                            " and select a related claim from its list. Claims from another "
+                            "match cannot be linked as an objection here."
+                        )
                     claim["relations"].append(
                         {"target": relation, "type": "objection", "by": actor.id}
                     )
@@ -386,7 +427,12 @@ class Assistance:
                 match["analysis_version"] = match.get("analysis_version", 0) + 1
                 await unit.save_match(match)
             elif target != "result":
-                raise ArenaError("Choose a claim ID or 'result'.")
+                raise ArenaError(
+                    "The dispute target could not be found in this match. Reopen `/match` → "
+                    "Claims and evidence to dispute a current claim, or choose Dispute result"
+                    " for the match outcome. Select the target from the current menu before "
+                    "entering your explanation."
+                )
             await unit.event(
                 match_id, "dispute", actor.id, {"target": target, **dispute}, self.arena.clock()
             )
@@ -460,7 +506,9 @@ class Assistance:
                     "verdict": "insufficient evidence",
                     "confidence": 0,
                     "source_ids": [],
-                    "explanation": "No inspectable sources were retrieved.",
+                    "explanation": "No inspectable sources were retrieved, so this check cannot "
+                    "establish whether the claim is true or false. A participant can use "
+                    "Dispute this claim to add a direct public HTTPS evidence link.",
                 }
             verdict.update(
                 sources=sources,
@@ -475,7 +523,8 @@ class Assistance:
                 {
                     "status": status,
                     "researched_at": now,
-                    "explanation": "Research unavailable; no factual conclusion.",
+                    "explanation": "Research unavailable; no factual conclusion. "
+                    + failure_reason(status),
                     "sources": sources,
                 },
                 job,

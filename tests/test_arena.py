@@ -26,6 +26,33 @@ async def test_setup_limits_and_audit(product):
     assert len(events) >= 2
 
 
+async def test_cooldown_reports_remaining_wait_and_does_not_create_another_challenge(product):
+    await product.arena.setup(ADMIN, {"challenge_cooldown": 60})
+    await pending(product.arena)
+    product.clock.advance(12.5)
+    with pytest.raises(ArenaError) as rejected:
+        await pending(product.arena)
+    assert "Wait 48 seconds" in str(rejected.value)
+    assert "View server configuration" in str(rejected.value)
+    async with product.arena.repo.unit() as unit:
+        assert len(await unit.rows("SELECT id FROM matches")) == 1
+
+
+@pytest.mark.parametrize(
+    "key,explanation",
+    [("llm:123:1", "resets at midnight UTC"), ("llm-match:test", "does not reset daily")],
+)
+async def test_usage_errors_explain_the_correct_reset_window(product, key, explanation):
+    async with product.arena.repo.unit() as unit:
+        await unit.use(key, 1)
+    with pytest.raises(ArenaError) as rejected:
+        async with product.arena.repo.unit() as unit:
+            await unit.use(key, 1)
+    assert explanation in str(rejected.value)
+    async with product.arena.repo.unit() as unit:
+        assert (await unit.one("SELECT count FROM usage WHERE id=?", (key,)))["count"] == 1
+
+
 async def test_mutual_identical_revision_and_permissions(product):
     arena = product.arena
     match = await pending(arena)

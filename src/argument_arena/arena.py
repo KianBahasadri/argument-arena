@@ -1,11 +1,19 @@
 """Durable debate state machine. Discord and provider requests never enter transactions."""
 
 import json
+import math
 import time
 import uuid
 from copy import deepcopy
 
 from argument_arena.competition import replay
+from argument_arena.messages import (
+    ADMIN_REQUIRED,
+    MISSING_ROUTES,
+    PROPOSAL_CHANGED,
+    RULES_LOCKED,
+    STAFF_REQUIRED,
+)
 from argument_arena.repository import Repository, encode
 from argument_arena.settings import (
     Actor,
@@ -24,12 +32,16 @@ def identity():
 
 def participant(match, actor):
     if actor.id not in match["players"] or actor.bot:
-        raise ArenaError("Only the two participants can perform this action.")
+        raise ArenaError(
+            "Only the two participants can perform this action. Spectators can view the match"
+            " but cannot change its rules or make decisions for a participant. Open `/match` "
+            "and select one of your own debates, or ask a participant to perform this action."
+        )
 
 
 def require_staff(actor, config):
     if not actor.staff(config):
-        raise ArenaError("Administrator or a configured moderator role required.")
+        raise ArenaError(STAFF_REQUIRED)
 
 
 def validate_debate(topic, positions):
@@ -40,7 +52,12 @@ def validate_debate(topic, positions):
         or len(positions) != 2
         or any(not isinstance(p, str) or not 1 <= len(p) <= 500 for p in positions)
     ):
-        raise ArenaError("Supply a topic (3–500 characters) and two positions (1–500 each).")
+        raise ArenaError(
+            "The debate details are incomplete or outside the allowed length. Enter a topic "
+            "of 3–500 characters and a position of 1–500 characters for each participant. "
+            "Reopen Edit topic and positions and fill in all three fields before sending or "
+            "confirming the challenge."
+        )
 
 
 class Arena:
@@ -50,11 +67,11 @@ class Arena:
 
     async def config(self, guild):
         async with self.repo.unit() as unit:
-            return await unit.document("guild", guild, server_defaults())
+            return validate_server(await unit.document("guild", guild, server_defaults()))
 
     async def setup(self, actor: Actor, patch: dict):
         if not actor.admin:
-            raise ArenaError("Administrator permission required for server configuration.")
+            raise ArenaError(ADMIN_REQUIRED)
         async with self.repo.unit() as unit:
             config = await unit.document("guild", actor.guild, server_defaults())
             for key, value in patch.items():
@@ -84,25 +101,44 @@ class Arena:
         self, actor, opponent, topic, positions, origin, preset="default", *, settings=None
     ):
         if actor.bot or opponent == actor.id or not opponent.isdecimal():
-            raise ArenaError("Choose another human server member.")
+            raise ArenaError(
+                "A challenge needs two different human members of this server. Choose someone"
+                " other than yourself or a bot with `/challenge @member`. For practice "
+                "against the bot, use `/train` → Start practice instead."
+            )
         validate_debate(topic, positions)
         now = self.clock()
         async with self.repo.unit() as unit:
             config = await unit.document("guild", actor.guild, server_defaults())
             if not config["categories"]["active"]:
-                raise ArenaError("An administrator must open /admin → Set up routes first.")
+                raise ArenaError(MISSING_ROUTES)
             if preset not in config["presets"] and preset != "default":
-                raise ArenaError("Unknown preset. Reopen /challenge to load the current presets.")
+                raise ArenaError(
+                    "This preset is no longer available in the server's settings. Reopen "
+                    "`/challenge @member` to load the current presets and choose one from its"
+                    " menu before sending the challenge."
+                )
             recent = await unit.document("challenge_clock", f"{actor.guild}:{actor.id}", 0)
             if now - recent < config["challenge_cooldown"]:
-                raise ArenaError("Challenge cooldown active; try again shortly.")
+                seconds = math.ceil(config["challenge_cooldown"] - (now - recent))
+                raise ArenaError(
+                    f"Challenge cooldown active. Wait {seconds} seconds before sending "
+                    "another challenge. This server limits how often one member can "
+                    "send challenges; an administrator can review the cooldown policy "
+                    "in `/admin` → View server configuration."
+                )
             rows = await unit.rows(
                 "SELECT data FROM matches WHERE guild=? AND state!='closed'", (actor.guild,)
             )
             for player in (actor.id, opponent):
                 count = sum(player in json.loads(row["data"])["players"] for row in rows)
                 if count >= config["max_concurrent"]:
-                    raise ArenaError("A participant has reached the concurrent match limit.")
+                    raise ArenaError(
+                        "A participant has reached this server's concurrent match limit "
+                        f"of {config['max_concurrent']}. Pending challenges and matches in "
+                        "progress both count. Open `/match` to finish or decline an existing "
+                        "match, or ask an administrator to review the limit before trying again."
+                    )
             settings = match_settings(
                 settings, config["defaults"] if preset == "default" else config["presets"][preset]
             )
@@ -160,9 +196,14 @@ class Arena:
                 return match
             participant(match, actor)
             if match["state"] != "challenge":
-                raise ArenaError("Accepted rules are locked. Start a new match to change them.")
+                raise ArenaError(RULES_LOCKED)
             if expected_revision is not None and expected_revision != match["revision"]:
-                raise ArenaError("Settings changed. Reopen /match and review the current revision.")
+                raise ArenaError(
+                    "Settings changed after this panel was opened, so this edit was not saved"
+                    " over the newer revision. Reopen `/match`, review the latest topic, "
+                    "positions and Features, then make your change there. Both participants "
+                    "must confirm any edited revision again."
+                )
             match["settings"] = match_settings(patch, match["settings"])
             validate_debate(
                 topic if topic is not None else match["topic"],
@@ -194,9 +235,18 @@ class Arena:
             match = await unit.match(match_id, actor.guild)
             participant(match, actor)
             if match["state"] != "challenge":
-                raise ArenaError("This challenge is no longer awaiting acceptance.")
+                raise ArenaError(
+                    "This challenge is no longer awaiting acceptance. It may already be "
+                    "starting, active or closed, so another confirmation cannot be applied. "
+                    "Reopen `/match` to see its current state and the actions available now."
+                )
             if revision != match["revision"]:
-                raise ArenaError("Settings changed. Review and confirm the current revision.")
+                raise ArenaError(
+                    "Settings changed after you reviewed this challenge, so your confirmation"
+                    " was not applied to different terms. Reopen `/match`, read the latest "
+                    "topic, positions and Features, then choose Confirm reviewed revision. "
+                    "Both members must confirm the same revision before a channel is created."
+                )
             if actor.id not in match["confirmed"]:
                 match["confirmed"].append(actor.id)
             if set(match["confirmed"]) == set(match["players"]):
@@ -323,16 +373,32 @@ class Arena:
             match = await unit.match(match_id, actor.guild)
             participant(match, actor)
             if match["state"] != "active" or match["next"] != actor.id:
-                raise ArenaError("You are not the required speaker in an active match.")
+                raise ArenaError(
+                    "You cannot submit a turn right now: the match must be active and it must"
+                    " be your turn. Open `/match` → Status to check the required speaker and "
+                    "current state. Wait for your turn or for an agreed resume before "
+                    "submitting."
+                )
             if match["settings"]["turns"]["structure"] != "submit":
-                raise ArenaError("This match advances automatically on a qualifying message.")
+                raise ArenaError(
+                    "This match advances automatically when the required speaker posts a "
+                    "qualifying official message; a separate Submit turn action is not used "
+                    "with these rules. Post in the debate channel, then check `/match` → "
+                    "Status. Discussion-thread messages, edits and reactions do not advance "
+                    "the turn."
+                )
             row = await unit.one(
                 "SELECT id FROM messages WHERE match_id=? AND author=? "
                 "AND deleted=0 ORDER BY created DESC LIMIT 1",
                 (match_id, actor.id),
             )
             if not row or row["id"] in match.get("submitted", []):
-                raise ArenaError("Post a new official message before submitting your turn.")
+                raise ArenaError(
+                    "No new official message from you is available for this turn. Post a new "
+                    "response in the debate channel, then return to `/match` → Submit turn. A"
+                    " discussion-thread message, edit to an older post or reaction does not "
+                    "count as a new official turn."
+                )
             match.setdefault("submitted", []).append(row["id"])
             await self._advance(unit, match, actor.id)
             await unit.save_match(match)
@@ -415,18 +481,33 @@ class Arena:
             if expected_proposal is not None and (
                 match.get("proposal") != expected_proposal or expected_proposal["by"] == actor.id
             ):
-                raise ArenaError("The proposal changed. Review the newest /match summary.")
+                raise ArenaError(PROPOSAL_CHANGED)
             if match["state"] == "closed":
-                raise ArenaError("Match already closed; use staff correction for result review.")
+                raise ArenaError(
+                    "Match already closed, so its clock and lifecycle can no longer be "
+                    "changed. Open `/match` to view the result. If the result needs "
+                    "correction, ask a moderator to open `/admin` → Moderate a match → "
+                    "Correct result and record a review explanation."
+                )
             if action == "decline":
                 participant(match, actor)
                 if match["state"] != "challenge":
-                    raise ArenaError("Only pending challenges can be declined.")
+                    raise ArenaError(
+                        "Only pending challenges can be declined. This match has already "
+                        "moved beyond confirmation. Reopen `/match` to check its state; "
+                        "participants can propose cancellation of an ongoing match, which "
+                        "requires the opponent's agreement."
+                    )
                 await self._close(unit, match, "cancelled", None, "Challenge declined")
             elif action == "concede":
                 participant(match, actor)
                 if match["state"] not in {"active", "paused"}:
-                    raise ArenaError("Concession requires an active or paused match.")
+                    raise ArenaError(
+                        "Concession requires an active or paused match. Reopen `/match` to "
+                        "check the current state. Decline a pending challenge instead; a "
+                        "match already in judging or closed needs moderator review. "
+                        "Confirming a concession immediately records your loss."
+                    )
                 await self._close(
                     unit,
                     match,
@@ -445,17 +526,31 @@ class Arena:
                     "cancel": OPEN,
                 }
                 if match["state"] not in allowed[action]:
-                    raise ArenaError(f"Cannot {action} a {match['state']} match.")
+                    states = ", ".join(sorted(allowed[action]))
+                    raise ArenaError(
+                        f"Cannot {action} a {match['state']} match. This action is available "
+                        f"only when the match is {states}. Reopen `/match` to check Status "
+                        "and choose from the actions available for its current state."
+                    )
                 if action == "extend" and (
                     type(data.get("hours")) is not int or not 1 <= data["hours"] <= 168
                 ):
-                    raise ArenaError("Extension hours must be an integer from 1 to 168.")
+                    raise ArenaError(
+                        "The deadline extension must be a whole number of hours from 1 to 168"
+                        " (up to seven days). Reopen `/match` → Extend deadline and enter a "
+                        "number such as 24. The opponent must agree to the proposed extension"
+                        " before it changes the deadline."
+                    )
                 if action == "request" and (
                     match["settings"]["turns"]["enabled"]
                     or data.get("speaker") not in match["players"]
                 ):
                     raise ArenaError(
-                        "Flexible matches require an explicit participant response request."
+                        "A response request is available only when fixed turn order is "
+                        "disabled, and the required speaker must be one of the two "
+                        "participants. Open `/match` → Request a speaker and select a "
+                        "participant. With fixed turn order enabled, follow the speaker shown"
+                        " in Status instead."
                     )
                 proposal = match["proposal"]
                 if not staff and not (
@@ -491,7 +586,13 @@ class Arena:
                         elif match["remaining"] is not None:
                             match["remaining"] += data["hours"] * 3600
                         else:
-                            raise ArenaError("No response deadline to extend.")
+                            raise ArenaError(
+                                "This match has no response deadline or paused time remaining"
+                                " to extend. Check `/match` → Features and Status. In a "
+                                "flexible match with response deadlines enabled, first agree "
+                                "on a required speaker; an extension only adds time to an "
+                                "existing clock."
+                            )
                         match["reminded"] = False
                     elif action == "request":
                         self._speaker(match, data["speaker"])
@@ -506,7 +607,11 @@ class Arena:
                             "Agreed or staff action",
                         )
             else:
-                raise ArenaError("Unknown lifecycle action.")
+                raise ArenaError(
+                    "This match action is not recognized by the running bot. Reopen `/match` "
+                    "and choose an action from its current menu. If the problem repeats with "
+                    "a fresh menu, ask the bot operator to check the deployment and logs."
+                )
             await unit.save_match(match)
             if match["channel"]:
                 await unit.job(
@@ -639,19 +744,36 @@ class Arena:
 
     async def correct(self, actor, match_id, outcome, winner, reason):
         if outcome not in {"judged", "draw", "concession", "forfeit", "cancelled", "inconclusive"}:
-            raise ArenaError("Invalid outcome.")
+            raise ArenaError(
+                "This result type is not supported. Reopen `/admin` → Moderate a match and "
+                "choose a result from the outcome menu: judged, draw, concession, forfeit, "
+                "cancelled or inconclusive. Choose a participant as winner only for a "
+                "decisive outcome."
+            )
         if len(reason.strip()) < 10:
-            raise ArenaError("Give a review explanation of at least ten characters.")
+            raise ArenaError(
+                "The result correction needs an explanation of at least 10 characters so "
+                "participants can understand the staff decision. Reopen Correct result and "
+                "describe the reason; it will be recorded in the match audit history."
+            )
         async with self.repo.unit() as unit:
             match = await unit.match(match_id, actor.guild)
             config = await unit.document("guild", actor.guild, server_defaults())
             require_staff(actor, config)
             row = await unit.one("SELECT * FROM results WHERE match_id=?", (match_id,))
             if not row or (winner is not None and winner not in match["players"]):
-                raise ArenaError("Choose a completed match and one of its participants.")
+                raise ArenaError(
+                    "A result correction requires a completed match, and any winner must be "
+                    "one of its two participants. Reopen `/admin` → Moderate a match, select "
+                    "the completed debate and use Correct result. Use Close with staff "
+                    "decision for a match still in progress."
+                )
             if (outcome in {"draw", "cancelled", "inconclusive"}) != (winner is None):
                 raise ArenaError(
-                    "Wins require a winner; draws, cancellations and inconclusive results do not."
+                    "The selected outcome and winner do not match. For judged wins, "
+                    "concessions and forfeits, select the winning participant. For draws, "
+                    "cancellations and inconclusive results, choose no winner. Reopen the "
+                    "staff result menu and review both choices before submitting."
                 )
             result = json.loads(row["data"])
             await unit.event(
@@ -697,19 +819,43 @@ class Arena:
 
     async def close_match(self, actor, match_id, outcome, winner, reason):
         if outcome not in {"judged", "draw", "concession", "forfeit", "cancelled", "inconclusive"}:
-            raise ArenaError("Invalid outcome.")
+            raise ArenaError(
+                "This result type is not supported. Reopen `/admin` → Moderate a match and "
+                "choose a result from the outcome menu: judged, draw, concession, forfeit, "
+                "cancelled or inconclusive. Choose a participant as winner only for a "
+                "decisive outcome."
+            )
         if len(reason.strip()) < 10:
-            raise ArenaError("Give a staff review explanation of at least ten characters.")
+            raise ArenaError(
+                "The staff decision needs an explanation of at least 10 characters so "
+                "participants can understand why the match is being closed. Reopen Close with"
+                " staff decision and describe the reason; it will be recorded in the match "
+                "audit history."
+            )
         async with self.repo.unit() as unit:
             match = await unit.match(match_id, actor.guild)
             config = await unit.document("guild", actor.guild, server_defaults())
             require_staff(actor, config)
             if match["state"] not in {"active", "paused", "judging"}:
-                raise ArenaError("Staff closure requires an active, paused or judging match.")
+                raise ArenaError(
+                    "Staff closure requires an active, paused or judging match. This match is"
+                    " in another state. Reopen `/admin` → Moderate a match to review it; use "
+                    "Correct result for a closed match, or decline a pending challenge "
+                    "through `/match`."
+                )
             if winner is not None and winner not in match["players"]:
-                raise ArenaError("Winner must be a participant.")
+                raise ArenaError(
+                    "The winner must be one of this match's two participants. Reopen the "
+                    "staff decision menu and select the winning participant there. Choose no "
+                    "winner only for a draw, cancellation or inconclusive result."
+                )
             if (outcome in {"draw", "cancelled", "inconclusive"}) != (winner is None):
-                raise ArenaError("Choose a winner for decisive outcomes only.")
+                raise ArenaError(
+                    "The selected outcome and winner do not match. Select a winning "
+                    "participant for judged wins, concessions and forfeits. Choose no winner "
+                    "for draws, cancellations and inconclusive results, then submit the staff"
+                    " decision again."
+                )
             await self._close(unit, match, outcome, winner, f"Staff review: {reason}")
             row = await unit.one("SELECT data FROM results WHERE match_id=?", (match_id,))
             result = json.loads(row["data"])
@@ -816,7 +962,10 @@ class Arena:
             if not row:
                 return {
                     "state": match["state"],
-                    "message": "No completed result; judging may be pending or unavailable.",
+                    "message": "No completed result is available yet. The match may still be "
+                    "in progress, or judging may be queued, running or blocked. Open `/match` "
+                    "→ Status to see pending work and any explanation. A moderator can "
+                    "retry failed work or resolve a match with a recorded staff decision.",
                 }
             data = json.loads(row["data"])
             data["audience_votes"] = {
@@ -889,13 +1038,31 @@ class Arena:
         async with self.repo.unit() as unit:
             match = await unit.match(match_id, actor.guild)
             settings = match["settings"]["audience"]
-            if actor.bot or not settings["enabled"] or player not in match["players"]:
-                raise ArenaError("Audience voting is disabled or the choice is invalid.")
+            if actor.bot or not settings["enabled"]:
+                raise ArenaError(
+                    "Audience voting is disabled for this match or unavailable to bot accounts. "
+                    "A human member can review `/match` → Features → Audience vote. "
+                    "Voting must have been enabled before the participants confirmed the rules."
+                )
+            if player not in match["players"]:
+                raise ArenaError(
+                    "An audience vote must choose one of this match's two participants. "
+                    "Reopen `/match` → Audience vote and select a participant from the menu. "
+                    "Audience votes do not change the judged result or ratings."
+                )
             if settings["eligibility"] == "spectators" and actor.id in match["players"]:
-                raise ArenaError("This poll is for spectators.")
+                raise ArenaError(
+                    "This audience poll is restricted to spectators, so the two participants "
+                    "cannot vote in it. Other eligible server members can vote through "
+                    "`/match` → Audience vote while the poll is open. Audience votes do not "
+                    "change the judged result or ratings."
+                )
             if match["state"] != "closed" or self.clock() > match["vote_until"]:
                 raise ArenaError(
-                    "Audience voting opens after closure for the agreed voting window."
+                    "Audience voting is not open right now. The poll begins when the match "
+                    "closes and lasts for the number of hours agreed in Features → Audience "
+                    "vote. Reopen `/match` to check the match state; a poll that has expired "
+                    "cannot accept more votes."
                 )
             match["votes"][actor.id] = player
             await unit.save_match(match)

@@ -35,6 +35,7 @@ from argument_arena.member_ui import (
     training_current,
     training_difficulty,
 )
+from argument_arena.providers import ProviderError
 from argument_arena.settings import DEFAULTS, WEIGHTS, Actor, ArenaError
 from argument_arena.settings_ui import FeatureView, SettingsTarget, parameters, show_settings
 from argument_arena.ui import Panel, parse_json
@@ -491,13 +492,14 @@ async def test_state_and_permissions_control_actions_and_server_admin_enforces_a
 
 async def test_routes_and_outputs_use_native_pickers_and_preserve_unedited_fields(client, product):
     panel = RoutesView(client, "40")
-    assert len(panel.to_components()) == 5
-    for index, picker in enumerate(panel.children[:4]):
+    assert len(panel.to_components()) == 4
+    for index, picker in enumerate(panel.children[:3]):
         picker._values = [SimpleNamespace(id=index + 11, guild=SimpleNamespace(id=123))]
         await picker.callback(interaction(40, True))
     await panel.save(interaction(40, True))
     config = await product.arena.config(A.guild)
     assert config["categories"]["active"] == "11"
+    assert config["categories"] == {"active": "11", "completed": "12", "cancelled": "13"}
     outputs = OutputsView(client, "40")
     outputs.children[0]._values = [SimpleNamespace(id=55, guild=SimpleNamespace(id=123))]
     await outputs.children[0].callback(interaction(40, True))
@@ -683,3 +685,76 @@ def test_invalid_advanced_settings_json_has_actionable_error():
         parse_json("{not-json}")
     with pytest.raises(ArenaError):
         parse_json("[]")
+
+
+async def test_missing_routes_explain_setup_without_creating_a_match(client, product):
+    await product.arena.setup(ADMIN, {"categories": {"active": None}})
+    request = interaction()
+    command = client.tree.get_command("challenge", guild=client.guild)
+    await command._do_call(request, {"member": SimpleNamespace(id=20, bot=False)})
+    message = content(request)
+    assert "folder" in message and "Set up routes" in message and "Save routes" in message
+    assert "same category" in message and "forfeited" in message
+    assert request.response.send_modal.call_count == 0
+    async with product.arena.repo.unit() as unit:
+        assert await unit.rows("SELECT id FROM matches") == []
+        assert await unit.rows("SELECT id FROM jobs") == []
+
+
+async def test_incomplete_category_setup_identifies_missing_choices_and_keeps_saved_routes(
+    client, product
+):
+    original = await product.arena.config(A.guild)
+    request = interaction(40, True)
+    await show_admin(request, client)
+    setup = interaction(40, True)
+    await choose(view(request), setup, "routes")
+    assert "Completed" in content(setup) and "forfeits" in content(setup)
+    panel = view(setup)
+    panel.children[0]._values = [SimpleNamespace(id=99, guild=SimpleNamespace(id=123))]
+    await panel.children[0].callback(interaction(40, True))
+    with pytest.raises(ArenaError) as rejected:
+        await panel.save(interaction(40, True))
+    assert "Completed, Cancelled" in str(rejected.value)
+    assert "have not changed" in str(rejected.value)
+    assert await product.arena.config(A.guild) == original
+
+
+async def test_failed_grading_explains_recovery_and_reuses_only_its_owners_saved_answer(
+    client, product
+):
+    await product.training.start(A)
+    answer = "My private answer explains the unsupported conclusion in this argument."
+    await product.training.answer(A, answer)
+    product.llm.responses["grade"] = ProviderError("credential_rejected", retry=False)
+    await product.worker.once()
+    request = interaction()
+    await show_training(request, client)
+    message = content(request)
+    assert "rejected the bot's API key" in message and "Retry failed grading" in message
+    assert answer not in message and await training_current(client, B) is None
+    async with product.arena.repo.unit() as unit:
+        session = await product.training._current(unit, A)
+        assert session["pending_answer"] == answer and session["state"] == "grading"
+    product.llm.responses.pop("grade")
+    await product.training.retry(A)
+    await product.worker.once()
+    assert (await product.training.progress(A))["attempts"] == 1
+
+
+async def test_match_status_explains_failed_and_scheduled_work(client, product):
+    match = await active(product.arena)
+    async with product.arena.repo.unit() as unit:
+        for key in ("failed-check", "waiting-check"):
+            await unit.job(key, "research", match["id"], {}, product.clock())
+    await product.arena.repo.job_failed(
+        "failed-check", product.clock(), "active_category_unavailable", retry=False
+    )
+    await product.arena.repo.job_failed("waiting-check", product.clock(), "rate_limited")
+    request = interaction()
+    await MatchView(client, match, A, await product.arena.config(A.guild)).selected(
+        request, "status"
+    )
+    message = content(request)
+    assert "Set up routes" in message and "Retry failed work" in message
+    assert "scheduled another attempt" in message and "no need to resubmit" in message

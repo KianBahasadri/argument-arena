@@ -37,10 +37,19 @@ class Unit:
     async def match(self, match_id, guild=None):
         row = await self.one("SELECT data FROM matches WHERE id=?", (match_id,))
         if row is None:
-            raise ArenaError("Match not found.")
+            raise ArenaError(
+                "This match could not be found in the saved records. Reopen `/match` and "
+                "choose a debate from the current list in this server. If you expected a new "
+                "challenge, check whether its setup was actually sent; an unsent or cancelled"
+                " draft creates no saved match."
+            )
         match = json.loads(row["data"])
         if guild is not None and match["guild"] != guild:
-            raise ArenaError("Match belongs to another server.")
+            raise ArenaError(
+                "This match belongs to another server, so it cannot be opened or "
+                "changed here. Run `/match` in the server where that debate was created and "
+                "select it from that server's list."
+            )
         return match
 
     async def save_match(self, match):
@@ -82,7 +91,19 @@ class Unit:
     async def use(self, key, limit):
         row = await self.one("SELECT count FROM usage WHERE id=?", (key,))
         if row and row["count"] >= limit:
-            raise ArenaError("Usage budget reached; pending work can be retried after reset.")
+            window = (
+                "This per-match limit does not reset daily. An administrator must review "
+                "the applicable policy before more work can run."
+                if key.startswith(("llm-match:", "research-match:"))
+                else "This daily limit resets at midnight UTC. Wait for the reset or ask "
+                "an administrator to review the configured allowance."
+            )
+            raise ArenaError(
+                f"Usage budget reached: the configured limit is {limit} requests. {window} "
+                "Existing messages and results remain available. After the cause is resolved, "
+                "retry failed work from the match's staff controls or Retry failed grading "
+                "in `/train`. No paid fallback is enabled."
+            )
         await self.db.execute(
             "INSERT INTO usage(id,count) VALUES(?,1) ON CONFLICT(id) DO UPDATE SET count=count+1",
             (key,),
@@ -106,7 +127,12 @@ class Repository:
         async with self.unit() as unit:
             row = await unit.one("SELECT * FROM claims WHERE id=?", (claim_id,))
             if not row:
-                raise ArenaError("Claim not found.")
+                raise ArenaError(
+                    "This claim could not be found in the match records. Reopen `/match` → "
+                    "Claims and evidence and select a claim from the current list. If the "
+                    "ledger is empty, official messages may not have been analyzed yet; check"
+                    " Status for pending or failed work."
+                )
             await unit.match(row["match_id"], guild)
             return json.loads(row["data"])
 

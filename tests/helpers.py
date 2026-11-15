@@ -169,7 +169,7 @@ async def configure(arena):
     await arena.setup(
         ADMIN,
         {
-            "categories": {"active": "1", "completed": "2", "forfeited": "3", "cancelled": "4"},
+            "categories": {"active": "1", "completed": "2", "cancelled": "4"},
             "moderator_roles": ["7"],
             "challenge_cooldown": 1,
         },

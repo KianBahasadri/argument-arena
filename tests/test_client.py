@@ -74,6 +74,10 @@ async def test_diagnostic_checks_storage_and_permissions(tmp_path):
         storage.check.assert_awaited_once()
         assert allowed.response.send_message.call_args.kwargs["ephemeral"] is True
         assert "storage OK" in allowed.response.send_message.call_args.args[0]
+        deferred = interaction(done=True)
+        await client.diagnostic(deferred)
+        deferred.response.send_message.assert_not_awaited()
+        assert "storage OK" in deferred.followup.send.call_args.args[0]
 
 
 async def test_command_error_responds_even_after_defer(tmp_path):
