@@ -1,10 +1,14 @@
+import asyncio
 import socket
+from contextlib import asynccontextmanager
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 from simcord import BackendError, SetupError
 
+from argument_arena import playground
 from argument_arena.playground import create_app, scenario
+from argument_arena.settings import Actor
 
 
 def output(result):
@@ -110,8 +114,57 @@ async def test_launcher_opens_native_preview_without_exposing_its_capability_in_
         assert native.status == 200 and "SimCord" in await native.text()
         rejected = await browser.post("/ai", headers={"Origin": "https://unrelated.example"})
         assert rejected.status == 403
+        bridge_rejected = await browser.session.post(
+            location.split("#")[0] + "api/pages",
+            headers={"Origin": "https://unrelated.example"},
+        )
+        assert bridge_rejected.status == 403
         reset = await browser.post("/scenario", data={"scenario": "unconfigured"})
         assert reset.status == 200
         reopened = await browser.get("/chat", allow_redirects=False)
         assert reopened.status == 302 and reopened.headers["Location"] != location
         assert (await browser.post("/ai")).status == 200
+
+
+async def test_browser_session_runs_match_creation_and_grading_without_manual_time(monkeypatch):
+    worlds = []
+
+    @asynccontextmanager
+    async def capture_world(**kwargs):
+        async with scenario(**kwargs) as world:
+            worlds.append(world)
+            yield world
+
+    monkeypatch.setattr(playground, "scenario", capture_world)
+    port = available_ports()
+    async with TestClient(TestServer(create_app(port), port=port)):
+        world = worlds[0]
+        alex, sam = [Actor(str(member.id), "123") for member in world.members[:2]]
+        started = world.env.now()
+        match = await world.bot.arena.challenge(
+            alex,
+            sam.id,
+            "Should the park open later?",
+            ["Open later", "Keep current hours"],
+            f"https://discord.com/channels/123/{world.lobby.id}",
+        )
+        await world.bot.arena.accept(alex, match["id"], match["revision"])
+        await world.bot.arena.accept(sam, match["id"], match["revision"])
+        await world.bot.training.start(alex)
+        await world.bot.training.answer(alex, "The premise does not establish the conclusion.")
+
+        # Poll durable results, without requests or advance_time driving the worker.
+        async with asyncio.timeout(5):
+            while True:
+                current = await world.bot.arena.repo.match(match["id"])
+                progress = await world.bot.training.progress(alex)
+                if current["channel"] and progress["attempts"]:
+                    break
+                await asyncio.sleep(0.05)
+
+        assert current["state"] == "active"
+        assert world.bot.get_channel(int(current["channel"])) is not None
+        assert progress["attempts"] == 1
+        assert "Sample feedback" in str(progress["latest"])
+        assert world.env.now() > started
+        world.env.raise_errors()

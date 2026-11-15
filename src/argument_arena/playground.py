@@ -103,19 +103,37 @@ async def scenario(*, configured=True):
 
 def create_app(port=8765, *, configured=True):
     """Keep only scenario controls here; SimCord owns every Discord UI interaction."""
-    from aiohttp import web
+    from aiohttp import ClientSession, DummyCookieJar, web
+
+    lock = asyncio.Lock()
+    stack, world, preview = None, None, None
+    selected = None
+    last_tick = time.monotonic()
+
+    async def advance_clock():
+        nonlocal last_tick
+        now = time.monotonic()
+        await world.env.advance_time(now - last_tick)
+        last_tick = now
 
     @web.middleware
     async def local_only(request, handler):
-        if request.host not in {f"127.0.0.1:{port}", f"localhost:{port}"}:
+        expected_port = port + 1 if request.app is bridge else port
+        if request.host not in {f"127.0.0.1:{expected_port}", f"localhost:{expected_port}"}:
             raise web.HTTPForbidden(text="Open the playground on localhost.")
         if request.headers.get("Origin") not in {None, f"http://{request.host}"}:
             raise web.HTTPForbidden(text="Use the playground's own controls.")
         try:
-            response = await handler(request)
+            # SimCord rejects overlapping environment operations. The same lock
+            # covers browser requests, resets and the real-time clock driver.
+            async with lock:
+                await advance_clock()
+                response = await handler(request)
         except web.HTTPException as response:
             response.headers["Cache-Control"] = "no-store"
             raise
+        if request.app is bridge:
+            return response
         response.headers.update(
             {
                 "Cache-Control": "no-store",
@@ -127,34 +145,84 @@ def create_app(port=8765, *, configured=True):
         return response
 
     app = web.Application(middlewares=[local_only], client_max_size=4096)
-    lock = asyncio.Lock()
-    stack, world, preview = None, None, None
-    selected = None
+    bridge = web.Application(middlewares=[local_only], client_max_size=26 * 1024 * 1024)
+
+    def preview_url():
+        return f"http://127.0.0.1:{port + 1}/#{preview.url.partition('#')[2]}"
 
     async def open_channel(channel):
         nonlocal preview, selected
         if preview:
             await preview.close()
         preview = await world.env.preview(
-            channel, viewers=world.members, layout="channel", port=port + 1
+            channel, viewers=world.members, layout="channel"
         ).__aenter__()
         selected = channel
 
     async def reset(ready):
-        nonlocal stack, world, preview
+        nonlocal stack, world, preview, last_tick
         if stack:
             await stack.aclose()
         stack, preview = AsyncExitStack(), None
         world = await stack.enter_async_context(scenario(configured=ready))
+        last_tick = time.monotonic()
         await open_channel(world.lobby)
 
+    async def clock_loop():
+        while True:
+            await asyncio.sleep(0.5)
+            async with lock:
+                await advance_clock()
+
+    async def forward(request):
+        # Proxy SimCord unchanged, keeping its capability and context checks.
+        # Only this bridge and the clock driver enter the simulated environment.
+        origin = preview.url.partition("/#")[0]
+        headers = request.headers.copy()
+        headers["Host"] = origin.removeprefix("http://")
+        if "Origin" in headers:
+            headers["Origin"] = origin
+        async with session.request(
+            request.method,
+            origin + request.raw_path,
+            headers=headers,
+            data=await request.read(),
+            allow_redirects=False,
+        ) as response:
+            return web.Response(
+                body=await response.read(),
+                status=response.status,
+                headers={
+                    key: value
+                    for key, value in response.headers.items()
+                    if key.lower() not in {"content-length", "transfer-encoding", "connection"}
+                },
+            )
+
+    bridge.router.add_route("*", "/{path:.*}", forward)
+
     async def lifespan(_app):
+        nonlocal session
+        bridge_runner = web.AppRunner(bridge, access_log=None)
+        clock = None
         try:
             await reset(configured)
+            session = ClientSession(cookie_jar=DummyCookieJar(), auto_decompress=False)
+            await bridge_runner.setup()
+            await web.TCPSite(bridge_runner, "127.0.0.1", port + 1).start()
+            clock = asyncio.create_task(clock_loop())
             yield
         finally:
+            if clock:
+                clock.cancel()
+                await asyncio.gather(clock, return_exceptions=True)
+            await bridge_runner.cleanup()
+            if session:
+                await session.close()
             if stack:
                 await stack.aclose()
+
+    session = None
 
     def channels():
         return {
@@ -204,24 +272,22 @@ SimCord's layout approximates Discord; a real-server check still verifies final 
 
     async def chat(request):
         # Keep SimCord's capability out of logs and the stable launcher URL.
-        raise web.HTTPFound(preview.url)
+        raise web.HTTPFound(preview_url())
 
     async def channel(request):
         data = await request.post()
         target = channels().get(data.get("channel"))
         if target is None:
             raise web.HTTPBadRequest(text="Refresh the launcher and choose a current channel.")
-        async with lock:
-            if selected.id != target.id:
-                await open_channel(target)
-        raise web.HTTPFound(preview.url)
+        if selected.id != target.id:
+            await open_channel(target)
+        raise web.HTTPFound(preview_url())
 
     async def change_scenario(request):
         data = await request.post()
         if data.get("scenario") not in {"configured", "unconfigured"}:
             raise web.HTTPBadRequest(text="Choose a scenario from the launcher.")
-        async with lock:
-            await reset(data["scenario"] == "configured")
+        await reset(data["scenario"] == "configured")
         raise web.HTTPFound("/")
 
     async def toggle_ai(request):
