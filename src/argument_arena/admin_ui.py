@@ -81,8 +81,8 @@ async def show_admin(interaction, client):
                     [
                         Field(
                             "patch",
-                            "Documented server policy patch (JSON)",
-                            "{}",
+                            "Advanced server settings",
+                            "",
                             max_length=4000,
                             paragraph=True,
                         )

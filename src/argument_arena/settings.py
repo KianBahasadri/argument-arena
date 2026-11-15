@@ -128,7 +128,7 @@ def match_settings(patch: dict | None = None, base: dict | None = None) -> dict:
                 raise ArenaError(
                     f"The {feature}.{key} list allows at most 25 text entries, each no longer "
                     "than 200 characters. Reopen the parameter form and put one entry on "
-                    "each line. In an advanced JSON patch, use an array of strings."
+                    "each line. In advanced server settings, enter one text value per entry."
                 )
             if type(value) in {int, float} and not 0 <= value <= 10000:
                 raise ArenaError(
@@ -294,8 +294,8 @@ def validate_server(config: dict) -> dict:
             raise ArenaError(
                 "Category, channel and role IDs must be valid Discord IDs written as strings "
                 "of digits, or null for an unset optional channel. Use the native pickers in "
-                "`/admin` for normal setup. In an advanced JSON patch, put quotation marks "
-                "around IDs; a category name or channel mention is not an ID."
+                "`/admin` for normal setup. In advanced server settings, write each ID as digits. "
+                "A category name or channel mention is not an ID."
             )
     if not isinstance(config["channel_name"], str) or "{id}" not in config["channel_name"]:
         raise ArenaError(

@@ -479,7 +479,8 @@ async def test_every_feature_can_be_inspected_and_parameters_have_valid_ui_compo
                 assert 1 <= len(view(request).children) <= 5
         request = interaction()
         await controls.details(request)
-        assert feature in content(request)
+        shown = content(request).lower()
+        assert feature.replace("_", " ") in shown and "{" not in shown
 
 
 async def test_state_and_permissions_control_actions_and_server_admin_enforces_at_execution(
@@ -658,7 +659,7 @@ async def test_profiles_preserve_consent_privacy_and_public_history_navigation(c
     assert (await client.profiles.settings(A))["analysis"]
     history = interaction(20)
     await choose(view(other), history, "history")
-    assert "statistics" in content(history)
+    assert "Wins" in content(history)
 
 
 async def test_help_is_ephemeral_in_channels_and_threads_with_valid_guidance(client):
@@ -731,7 +732,7 @@ async def test_feedback_without_judging_does_not_change_outcome(product):
 
 
 def test_invalid_advanced_settings_json_has_actionable_error():
-    with pytest.raises(ArenaError, match="valid JSON"):
+    with pytest.raises(ArenaError, match="could not be read"):
         parse_json("{not-json}")
     with pytest.raises(ArenaError):
         parse_json("[]")
