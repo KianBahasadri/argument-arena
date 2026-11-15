@@ -316,7 +316,26 @@ button:hover,a.primary:hover{background:#314249}button:active{transform:scale(.9
 
     async def script(request):
         return web.Response(
-            text='window.addEventListener("focus", () => location.reload());',
+            text="""let refreshing = false;
+window.addEventListener("focus", async () => {
+  if (refreshing) return;
+  refreshing = true;
+  try {
+    const response = await fetch("/", {cache: "no-store"});
+    if (!response.ok) return;
+    const updated = new DOMParser().parseFromString(await response.text(), "text/html");
+    const selector = 'form[action="/channel"]';
+    const current = document.querySelector(selector);
+    const next = updated.querySelector(selector);
+    if (current && next && current.innerHTML !== next.innerHTML) {
+      current.replaceChildren(...next.childNodes);
+    }
+  } catch {
+    // Keep the current controls; the explicit refresh link remains available.
+  } finally {
+    refreshing = false;
+  }
+});""",
             content_type="application/javascript",
         )
 
