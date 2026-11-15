@@ -112,8 +112,10 @@ class Panel(discord.ui.View):
             str(error) if isinstance(error, ArenaError) else interaction_error(error),
         )
 
-    def button(self, label, callback, *, style=discord.ButtonStyle.secondary, row=None):
-        item = discord.ui.Button(label=label, style=style, row=row)
+    def button(
+        self, label, callback, *, style=discord.ButtonStyle.secondary, row=None, custom_id=None
+    ):
+        item = discord.ui.Button(label=label, style=style, row=row, custom_id=custom_id)
 
         async def selected(interaction):
             await callback(interaction)
@@ -121,6 +123,20 @@ class Panel(discord.ui.View):
         item.callback = selected
         self.add_item(item)
         return item
+
+    def actions(self, choices, callback, *, row=0, columns=3, styles=None):
+        for index, (value, label) in enumerate(choices):
+
+            async def selected(interaction, value=value):
+                await callback(interaction, value)
+
+            self.button(
+                label,
+                selected,
+                style=(styles or {}).get(value, discord.ButtonStyle.secondary),
+                row=row + index // columns,
+                custom_id=f"action:{value}",
+            )
 
     def select(self, placeholder, options, callback, *, row=None):
         item = discord.ui.Select(placeholder=placeholder, options=options, row=row)

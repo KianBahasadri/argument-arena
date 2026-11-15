@@ -1,27 +1,5 @@
 # Development and offline validation
 
-## Browser playground
-
-Try the real bot commands, buttons and forms in [SimCord's browser preview](https://simcord.readthedocs.io/en/latest/guides/preview/) without a Discord account, token, deployment or provider key. After the usual development setup below, launch it with:
-
-```bash
-.venv/bin/python -m argument_arena playground
-```
-
-Open **<http://127.0.0.1:8765>**, then **Open bot preview**. Type `/help` or `/challenge`, choose Sam, and fill in the setup form. Use **Viewing as** to switch between Alex and Sam, open `/match`, select the challenge and confirm as both members. Return to the launcher to open the newly created debate channel. Its channel list refreshes when you focus the launcher; an explicit Refresh channel list link is also available. SimCord supplies the Discord-style UI and executes real discord.py interactions, permission checks and callbacks. The launcher only selects scenarios and channels.
-
-Kian has Administrator permission, Morgan has the configured moderator role, and Jamie is a spectator. Try `/admin`, `/train`, `/profile` and `/leaderboard`, use the launcher to reset to missing server setup, or toggle AI between fixed sample responses and an unavailable-service error. The browser session advances SimCord's virtual clock with elapsed real time, so match creation, training grading, cooldowns and panel timeouts work without manual time advancement. Background jobs run automatically; use SimCord's **Refresh preview** after asynchronous work. Scores, research, coaching and training feedback are synthetic examples, labelled as samples. They do not evaluate model quality or send inference requests. The deployed bot continues using MiniMax M3.1 Flash through OpenCode Go.
-
-The playground ignores deployment environment settings and keys, uses a fresh temporary SQLite database, and never reads or changes production data. Resetting or restarting discards only the demo data. Python source changes restart it automatically; reopen the preview from the launcher afterward. Stop it with Ctrl+C. Use `--no-reload` to retain the process while editing, `--unconfigured` to begin without category setup, or `--port 9000` to change the launcher's port. The preview uses the adjacent port, so both ports must be free. A local bridge forwards SimCord's UI and requests unchanged to its internally allocated port, serializing them with clock advancement and scenario resets because SimCord rejects overlapping environment operations. All servers bind to loopback. The private capability in the native preview URL authorizes that demo session; do not share it or include it in logs. The stable launcher URL contains no capability.
-
-For just this tool, install the optional dependency once:
-
-```bash
-.venv/bin/python -m pip install -e '.[playground]'
-```
-
-SimCord's preview is an approximation of Discord's rendering and covers one channel at a time. Some Discord behavior may not be implemented by the simulator. Keep an occasional check in the real server for platform and visual compatibility. SimCord integration tests exercise a full challenge, channel creation, spectator posting restrictions, concession archival and private training through the real transport simulation; other application tests retain their fast service fixtures.
-
 ## Validation
 
 Use Python 3.12, Bash, and a local Docker daemon running Linux containers. The shared validation entry point uses Terraform **1.13.5** from `.terraform-version`: it reuses a matching CLI on PATH or downloads the [official release](https://releases.hashicorp.com/terraform/1.13.5/), verifies it against `scripts/terraform-checksums.json`, and caches the executable under ignored `.tools/terraform/`. Linux/macOS AMD64 and ARM64 and Windows AMD64 operator platforms have committed archive checksums. Docker must support the developer machine's architecture; the owner's server platform is a separate, intentionally blank deployment input.

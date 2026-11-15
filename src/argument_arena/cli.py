@@ -24,10 +24,6 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("run", help="Start the Gateway client (the default)")
     sub.add_parser("check-config", help="Validate configuration and token file without connecting")
-    playground = sub.add_parser("playground", help="Try the bot in SimCord's local browser preview")
-    playground.add_argument("--port", type=int, default=8765)
-    playground.add_argument("--no-reload", action="store_true")
-    playground.add_argument("--unconfigured", action="store_true")
     probe = sub.add_parser("healthcheck", help="Probe local readiness without Discord access")
     probe.add_argument("--liveness", action="store_true")
     sub.add_parser("migrate", help="Apply migrations offline; bot must be stopped")
@@ -38,16 +34,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     configure_logging()
     try:
-        if args.command == "playground":
-            import importlib.util
-
-            if importlib.util.find_spec("simcord") is None:
-                print('Install the playground: python -m pip install -e ".[playground]"')
-                return 1
-            from argument_arena.playground import run
-
-            run(args.port, reload=not args.no_reload, configured=not args.unconfigured)
-            return 0
         if args.command == "healthcheck":
             return 0 if healthy(args.data_dir, readiness=not args.liveness) else 1
         if args.command in {"migrate", "backup", "restore"}:

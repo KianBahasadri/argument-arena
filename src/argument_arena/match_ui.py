@@ -330,18 +330,56 @@ def available_actions(match, who, config, now):
 
 
 class MatchView(Panel):
-    def __init__(self, client, match, who, config):
+    def __init__(self, client, match, who, config, *, expanded=False):
         super().__init__(client, who.id)
         self.match = match
-        self.select(
-            "Choose a match action",
+        available = available_actions(match, who, config, client.arena.clock())
+        preferred = {
+            "challenge": ("accept", "decline", "edit", "settings"),
+            "active": ("submit", "agree", "pause", "claims"),
+            "paused": ("agree", "resume", "claims", "status"),
+            "judging": ("result", "status", "claims"),
+            "closed": ("result", "vote", "dispute", "claims"),
+        }.get(match["state"], ("status", "settings", "claims"))
+        primary = [key for key in preferred if key in available]
+        for key in ("status", "settings"):
+            if key in available and key not in primary and len(primary) < 4:
+                primary.append(key)
+        secondary = [key for key in available if key not in primary]
+        labels = {"accept": "Confirm challenge", "decline": "Decline", "edit": "Edit setup"}
+        self.actions(
             [
-                discord.SelectOption(label=ACTIONS[key][0], value=key, description=ACTIONS[key][1])
-                for key in available_actions(match, who, config, client.arena.clock())
+                (key, labels.get(key, ACTIONS[key][0]))
+                for key in (secondary if expanded else primary)
             ],
             self.selected,
+            columns=2,
+            styles={
+                "accept": discord.ButtonStyle.success,
+                "agree": discord.ButtonStyle.success,
+                "submit": discord.ButtonStyle.primary,
+                "decline": discord.ButtonStyle.danger,
+                "concede": discord.ButtonStyle.danger,
+                "cancel": discord.ButtonStyle.danger,
+            },
         )
-        self.button("Choose another match", self.browse, row=1)
+        if expanded:
+            self.button("Back to match", self.back, row=4)
+        elif secondary:
+            self.button("More actions", self.more, row=2)
+        self.button("Choose another match", self.browse, row=4 if expanded else 2)
+
+    async def back(self, interaction):
+        await show_match(interaction, self.client, self.match["id"])
+
+    async def more(self, interaction):
+        current = await self.client.arena.repo.match(self.match["id"], str(interaction.guild_id))
+        config = await self.client.arena.config(str(interaction.guild_id))
+        await respond(
+            interaction,
+            summary(current),
+            MatchView(self.client, current, actor(interaction), config, expanded=True),
+        )
 
     async def browse(self, interaction):
         await show_picker(interaction, self.client)
@@ -453,15 +491,21 @@ class MatchView(Panel):
                 else:
                     await self.lifecycle(request, current, "request", {"speaker": player})
 
-            panel.select(
-                "Choose a participant",
-                [
-                    discord.SelectOption(label=f"Position {i + 1}: member {player}", value=player)
-                    for i, player in enumerate(current["players"])
-                ],
+            panel.actions(
+                [(player, f"Position {i + 1}") for i, player in enumerate(current["players"])],
                 chosen,
+                columns=2,
             )
-            await respond(interaction, ACTIONS[action][1], panel)
+            await respond(
+                interaction,
+                ACTIONS[action][1]
+                + "\n"
+                + "\n".join(
+                    f"Position {i + 1}: member {player}"
+                    for i, player in enumerate(current["players"])
+                ),
+                panel,
+            )
         elif action == "extend":
 
             async def extend(request, values):
@@ -867,25 +911,19 @@ async def staff_outcome(interaction, parent, match):
             await reason(request, None)
         else:
             winners = Panel(parent.client, parent.owner)
-            winners.select(
-                "Choose the winning participant",
-                [
-                    discord.SelectOption(label=f"Position {i + 1}: member {p}", value=p)
-                    for i, p in enumerate(match["players"])
-                ],
+            winners.actions(
+                [(p, f"Position {i + 1}") for i, p in enumerate(match["players"])],
                 reason,
+                columns=2,
             )
             await respond(
                 request,
-                "This is an explicit staff decision. Choose the winning participant.",
+                "This is an explicit staff decision. Choose the winning participant.\n"
+                + "\n".join(f"Position {i + 1}: <@{p}>" for i, p in enumerate(match["players"])),
                 winners,
             )
 
-    panel.select(
-        "Choose the recorded outcome",
-        [discord.SelectOption(label=name.title(), value=name) for name in outcomes],
-        selected,
-    )
+    panel.actions([(name, name.title()) for name in outcomes], selected)
     await respond(
         interaction,
         "Choose an outcome, then explain the decision. Ratings are replayed after a correction.",

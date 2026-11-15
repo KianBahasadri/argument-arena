@@ -114,20 +114,16 @@ class FeatureView(Panel):
             self.button("Turn off" if values["enabled"] else "Turn on", self.toggle, row=0)
             fields = list(parameters(values))
             if fields:
-                self.select(
-                    "Choose a parameter to edit",
+                self.actions(
                     [
-                        discord.SelectOption(
-                            label=" / ".join(path).replace("_", " ").title()[:100],
-                            value=".".join(path),
-                        )
+                        (".".join(path), " / ".join(path).replace("_", " ").title())
                         for path, value in fields
                     ],
                     self.parameter,
                     row=1,
                 )
-        self.button("Back to summary", target.show, row=2)
-        self.button("Full feature details", self.details, row=2)
+        self.button("Back to summary", target.show, row=3)
+        self.button("Full feature details", self.details, row=3)
 
     async def details(self, interaction):
         current = await self.target.read()
@@ -195,13 +191,14 @@ class FeatureView(Panel):
             async def chosen(request, selected):
                 await save(request, choices[int(selected)][1])
 
-            panel.select(
-                "Choose a value",
-                [
-                    discord.SelectOption(label=label, value=str(i))
-                    for i, (label, item) in enumerate(choices)
-                ],
+            panel.actions(
+                [(str(i), label) for i, (label, item) in enumerate(choices)],
                 chosen,
+                styles={
+                    str(i): discord.ButtonStyle.primary
+                    for i, (_, item) in enumerate(choices)
+                    if item == value
+                },
             )
             await respond(interaction, f"**{FEATURES[self.feature]} → {text(name)}**", panel)
             return

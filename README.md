@@ -1,7 +1,5 @@
 # Argument Arena
 
-For a local browser preview without deploying, run `.venv/bin/python -m argument_arena playground` after development setup. See the [playground walkthrough](docs/development.md#browser-playground).
-
 A Discord bot for a server built around arguments: organize one-on-one debate matches, moderate the conversation, research claims, score arguments with LLMs, and help members improve through feedback and practice.
 
 **Status: complete product implementation on the merged Python 3.12 / discord.py foundation.** Server setup, negotiated matches, durable lifecycle, sourced research, configurable assistance/judging, Elo competition, original reasoning training and consent-controlled profiles are implemented with offline tests. The non-root container, SQLite migrations/backup, Terraform deployment and shared validation entry point are retained. The owner's server inputs remain intentionally blank; no live Discord installation, paid provider call or deployment is claimed.

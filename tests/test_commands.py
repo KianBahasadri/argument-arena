@@ -88,6 +88,35 @@ def content(request):
 
 
 async def choose(panel, request, value, index=0):
+    button = next(
+        (
+            item
+            for item in panel.children
+            if isinstance(item, discord.ui.Button) and item.custom_id == f"action:{value}"
+        ),
+        None,
+    )
+    if button is None and isinstance(panel, MatchView):
+        more = interaction(
+            request.user.id,
+            request.permissions.administrator,
+            request.guild_id,
+            request.channel_id,
+            tuple(role.id for role in request.user.roles),
+        )
+        await panel.more(more)
+        panel = view(more)
+        button = next(
+            (
+                item
+                for item in panel.children
+                if isinstance(item, discord.ui.Button) and item.custom_id == f"action:{value}"
+            ),
+            None,
+        )
+    if button is not None:
+        await button.callback(request)
+        return
     selector = [item for item in panel.children if isinstance(item, discord.ui.Select)][index]
     assert value in [option.value for option in selector.options]
     selector._values = [value]
@@ -247,7 +276,7 @@ async def test_draft_features_are_typed_and_dependencies_and_ranked_rules_apply(
     assert sum(proposal.settings["judging"]["weights"].values()) == 100
     model_request = interaction()
     await judge.parameter(model_request, "model")
-    assert len(view(model_request).children[0].options) == 1
+    assert [item.custom_id for item in view(model_request).children] == ["action:0"]
     assert dict(parameters(DEFAULTS["judging"]))[("weights",)] == WEIGHTS
 
 
@@ -446,8 +475,8 @@ async def test_every_feature_can_be_inspected_and_parameters_have_valid_ui_compo
                 assert len(form.children) <= 5
                 assert all(len(child.to_component_dict()["label"]) <= 45 for child in form.children)
             else:
-                options = view(request).children[0].options
-                assert 1 <= len(options) <= 25
+                assert all(isinstance(item, discord.ui.Button) for item in view(request).children)
+                assert 1 <= len(view(request).children) <= 5
         request = interaction()
         await controls.details(request)
         assert feature in content(request)
@@ -487,7 +516,7 @@ async def test_state_and_permissions_control_actions_and_server_admin_enforces_a
     assert (await product.arena.config(A.guild))["max_concurrent"] == 3
     moderator = interaction(50, roles=(7,))
     await show_admin(moderator, client)
-    assert [o.value for o in view(moderator).children[0].options] == ["moderate"]
+    assert [item.custom_id for item in view(moderator).children] == ["action:moderate"]
 
 
 async def test_routes_and_outputs_use_native_pickers_and_preserve_unedited_fields(client, product):
@@ -595,7 +624,9 @@ async def test_optional_fallacy_selection_preserves_other_practice_modes(client,
     request = interaction()
     await training_difficulty(request, client, "repair")
     library = interaction()
-    await view(request).children[1].callback(library)
+    await next(
+        item for item in view(request).children if item.label == "Choose a fallacy (optional)"
+    ).callback(library)
     entry = view(library).children[0].options[0].value
     difficulty = interaction()
     await choose(view(library), difficulty, entry)
@@ -635,7 +666,7 @@ async def test_help_is_ephemeral_in_channels_and_threads_with_valid_guidance(cli
         request = interaction(30, channel=channel)
         await client.tree.get_command("help", guild=client.guild)._do_call(request, {})
         assert "/challenge @member" in content(request)
-        assert "admin" not in [o.value for o in view(request).children[0].options]
+        assert "action:admin" not in [item.custom_id for item in view(request).children]
     for key, (title, description) in HELP.items():
         request = interaction(40, True)
         await show_help(request, client, key)
@@ -657,6 +688,25 @@ async def test_summary_and_panels_fit_discord_limits_and_errors_do_not_expose_de
     request = interaction()
     await show_match(request, client, match["id"])
     assert len(view(request).to_components()) <= 5
+    config = await client.arena.config(A.guild)
+    for state in ("challenge", "starting", "active", "paused", "judging", "closed"):
+        for who in (A, B, STAFF, Actor(A.id, A.guild, ("7",)), Actor("30", A.guild)):
+            current = deepcopy(match)
+            current["state"] = state
+            current["settings"]["turns"]["enabled"] = False
+            current["proposal"] = {"by": B.id, "action": "extend", "data": {"hours": 2}}
+            exposed = set()
+            for expanded in (False, True):
+                controls = MatchView(client, current, who, config, expanded=expanded)
+                rows = controls.to_components()
+                assert len(rows) <= 5 and all(len(row["components"]) <= 5 for row in rows)
+                assert all(isinstance(item, discord.ui.Button) for item in controls.children)
+                exposed.update(
+                    item.custom_id.removeprefix("action:")
+                    for item in controls.children
+                    if item.custom_id.startswith("action:")
+                )
+            assert exposed == set(available_actions(current, who, config, product.clock()))
     panel = Panel(client, A.id)
     denied = interaction(30)
     assert not await panel.interaction_check(denied)

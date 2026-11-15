@@ -117,20 +117,18 @@ async def show_help(interaction, client, topic="start"):
     async def selected(request, key):
         await show_help(request, client, key)
 
-    panel.select(
-        "More guidance",
-        [
-            discord.SelectOption(label=HELP[key][0], value=key, default=key == topic)
-            for key in topics
-        ],
+    panel.actions(
+        [(key, HELP[key][0]) for key in topics],
         selected,
+        columns=2,
+        styles={topic: discord.ButtonStyle.primary},
     )
     if topic == "rules":
 
         async def configuration(request):
             await respond(request, await client.arena.config(str(request.guild_id)))
 
-        panel.button("View server configuration", configuration, row=1)
+        panel.button("View server configuration", configuration, row=4)
     embed = discord.Embed(title=title, description=description)
     embed.set_footer(
         text="/challenge · /match · /train · /profile · /leaderboard · /admin · /help | "

@@ -35,35 +35,31 @@ async def training_current(client, who):
 class TrainingView(Panel):
     def __init__(self, client, owner, latest):
         super().__init__(client, owner)
-        options = [
-            ("current", "Current exercise", "Prompt, last feedback and grading status"),
-            ("progress", "Progress", "Accuracy, practice needs and recommendations"),
-            ("library", "Fallacy library", "Names and attributed reference links"),
-        ]
         active = latest and latest["state"] in {"active", "grading"}
-        if active:
-            options += [("stop", "Stop session", "Keep completed practice in your progress")]
-            if latest["state"] == "active":
-                options += [
-                    ("answer", "Answer exercise", "Explain your reasoning in a text form"),
-                    ("hint", "Request a hint", "Optional; hints are counted separately"),
-                ]
-            else:
-                options += [
-                    ("retry", "Retry failed grading", "Use after provider configuration is fixed")
-                ]
+        if active and latest["state"] == "active":
+            options = [("answer", "Answer exercise"), ("hint", "Request a hint")]
+        elif active:
+            options = [("retry", "Retry failed grading")]
         else:
-            options += [
-                ("start", "Start practice", "Choose mode, difficulty, topic and optional fallacy")
-            ]
-        self.options = {key for key, label, description in options}
-        self.select(
-            "Choose a training action",
-            [
-                discord.SelectOption(label=label, value=key, description=description)
-                for key, label, description in options
-            ],
+            options = [("start", "Start practice")]
+        options += [
+            ("current", "Current exercise"),
+            ("progress", "Progress"),
+            ("library", "Fallacy library"),
+        ]
+        if active:
+            options.append(("stop", "Stop session"))
+        self.options = {key for key, label in options}
+        self.actions(
+            options,
             self.selected,
+            columns=2,
+            styles={
+                "start": discord.ButtonStyle.primary,
+                "answer": discord.ButtonStyle.primary,
+                "retry": discord.ButtonStyle.primary,
+                "stop": discord.ButtonStyle.danger,
+            },
         )
 
     async def selected(self, interaction, action):
@@ -82,20 +78,17 @@ class TrainingView(Panel):
                 else:
                     await training_difficulty(request, self.client, selected)
 
-            panel.select(
-                "Choose a practice mode",
+            panel.actions(
                 [
-                    discord.SelectOption(label=label, value=value)
-                    for value, label in [
-                        ("spot", "Spot a fallacy"),
-                        ("selected", "Choose a fallacy"),
-                        ("mixed", "Mixed practice"),
-                        ("battle", "Three-turn bot battle"),
-                        ("repair", "Repair an argument"),
-                        ("sound", "Sound or fallacious?"),
-                    ]
+                    ("spot", "Spot a fallacy"),
+                    ("selected", "Choose a fallacy"),
+                    ("mixed", "Mixed practice"),
+                    ("battle", "Three-turn bot battle"),
+                    ("repair", "Repair an argument"),
+                    ("sound", "Sound or fallacious?"),
                 ],
                 mode,
+                columns=2,
             )
             await respond(
                 interaction, "Practice is private and never changes competitive ratings.", panel
@@ -234,10 +227,9 @@ async def training_difficulty(interaction, client, mode, fallacy=None):
             )
         )
 
-    panel.select(
-        "Choose difficulty",
+    panel.actions(
         [
-            discord.SelectOption(label=label, value=str(value))
+            (str(value), label)
             for value, label in [
                 (1, "1 · introductory"),
                 (2, "2 · intermediate"),
@@ -273,12 +265,13 @@ class ProfileView(Panel):
                 ("remove", "Remove generated insights"),
             ]
         self.choices = {key for key, label in choices}
-        self.select(
-            "Choose a profile action",
-            [discord.SelectOption(label=label, value=key) for key, label in choices],
+        self.actions(
+            choices,
             self.selected,
+            columns=2,
+            styles={"remove": discord.ButtonStyle.danger},
         )
-        picker = discord.ui.UserSelect(placeholder="Choose another server member", row=1)
+        picker = discord.ui.UserSelect(placeholder="Choose another server member", row=3)
 
         async def selected(interaction):
             member = picker.values[0]
@@ -343,17 +336,13 @@ class ProfileView(Panel):
                         )
                     )
 
-                controls.select(
-                    "How should this observation be used?",
+                controls.actions(
                     [
-                        discord.SelectOption(
-                            label="Attach correction and keep included", value="include"
-                        ),
-                        discord.SelectOption(
-                            label="Attach correction and exclude", value="exclude"
-                        ),
+                        ("include", "Keep with correction"),
+                        ("exclude", "Exclude with correction"),
                     ],
                     edit,
+                    columns=2,
                 )
                 await respond(request, "Only your own observation is changed.", controls)
 
@@ -397,13 +386,26 @@ async def profile_preferences(interaction, client):
         "training": "Include training progress",
         "recommendations": "Practice recommendations",
     }
-    panel.select(
-        "Choose a preference to change",
+    panel.actions(
         [
-            discord.SelectOption(label=f"{label}: {prefs[key]}"[:100], value=key)
-            for key, label in names.items()
+            ("analysis", "Disable insights" if prefs["analysis"] else "Enable insights"),
+            (
+                "visibility",
+                "Make profile public"
+                if prefs["visibility"] == "private"
+                else "Make profile private",
+            ),
+            (
+                "training",
+                "Hide training progress" if prefs["training"] else "Include training progress",
+            ),
+            (
+                "recommendations",
+                "Disable recommendations" if prefs["recommendations"] else "Enable recommendations",
+            ),
         ],
         selected,
+        columns=2,
     )
     await respond(
         interaction,

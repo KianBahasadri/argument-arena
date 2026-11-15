@@ -23,7 +23,7 @@ async def show_admin(interaction, client):
     if actor(interaction).admin:
         options += [
             ("routes", "Set up routes"),
-            ("outputs", "Output channels and moderator roles"),
+            ("outputs", "Outputs and roles"),
             ("defaults", "Default match features"),
             ("config", "View server configuration"),
             ("advanced", "Advanced server policy"),
@@ -97,11 +97,7 @@ async def show_admin(interaction, client):
                 "fails, ask the bot operator to check the deployment and logs."
             )
 
-    panel.select(
-        "Choose an administration action",
-        [discord.SelectOption(label=label, value=name) for name, label in options],
-        selected,
-    )
+    panel.actions(options, selected, columns=2)
     await respond(
         interaction,
         "**Administration**\nServer setup requires Administrator. Configured "
