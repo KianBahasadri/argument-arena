@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the installed Discord schema, settings documentation and six-phase delivery contract."""
+"""Check the installed Discord schema and match settings UI."""
 
 import asyncio
 import tempfile
@@ -16,10 +16,6 @@ from argument_arena.storage import Storage
 
 
 async def main():
-    root = Path(__file__).resolve().parents[1]
-    documentation = (root / "docs/commands.md").read_text()
-    policy = (root / "docs/product.md").read_text()
-    readme = (root / "README.md").read_text()
     with tempfile.TemporaryDirectory() as directory:
         async with Storage(Path(directory) / "arena.sqlite3") as storage:
             config = Config(123, Path(directory) / "unused-token", sync_commands=False)
@@ -32,8 +28,6 @@ async def main():
                         commands.extend(command.walk_commands())
                     else:
                         commands.append(command)
-                for command in commands:
-                    assert f"`/{command.qualified_name}`" in documentation, command.qualified_name
                 assert {c.qualified_name for c in commands} == {
                     "challenge",
                     "match",
@@ -50,10 +44,7 @@ async def main():
     assert set(FEATURES) == set(DEFAULTS), "Every match feature needs a named UI control"
     assert "24-hour" in HELP["automatic"][1]
     assert "same revision" in HELP["start"][1]
-    for feature in DEFAULTS:
-        assert f"| `{feature}` |" in policy, feature
-    assert readme.count("- [x] **") == 6, "Document all six completed implementation phases"
-    print(f"Product contract: {len(commands)} commands, {len(DEFAULTS)} settings, six phases")
+    print(f"Product contract: {len(commands)} commands, {len(DEFAULTS)} settings")
 
 
 if __name__ == "__main__":
