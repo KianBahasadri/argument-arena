@@ -306,7 +306,7 @@ class OpenAI:
                         model=self.model,
                         input=messages,
                         text={"format": {"type": "json_object"}},
-                        reasoning={"effort": "low"},
+                        reasoning={"effort": "max"},
                         max_output_tokens=3000,
                         store=False,
                     )
@@ -318,7 +318,7 @@ class OpenAI:
                         model=self.model,
                         messages=messages,
                         response_format={"type": "json_object"},
-                        reasoning_effort="low",
+                        reasoning_effort="max",
                         max_completion_tokens=3000,
                     )
                     choice = response.choices[0]

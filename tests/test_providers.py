@@ -43,7 +43,7 @@ async def test_real_openai_adapter_runtime_secret_roles_endpoint_and_json(tmp_pa
         request["model"] == "configured-model"
         and request["response_format"]["type"] == "json_object"
     )
-    assert request["reasoning_effort"] == "low"
+    assert request["reasoning_effort"] == "max"
     key.write_text("rotated-key")
     await provider.complete("analyze", {}, "configured-model")
     assert http.request.call_args.args[1]["Authorization"] == "Bearer rotated-key"
@@ -114,11 +114,12 @@ async def test_sdk_responses_api_uses_go_credentials_json_and_no_storage(tmp_pat
     assert request["input"][0]["role"] == "system"
     assert request["input"][1]["role"] == "user"
     assert request["text"]["format"]["type"] == "json_object"
+    assert request["reasoning"] == {"effort": "max"}
     assert request["max_output_tokens"] == 3000 and request["store"] is False
 
 
 @pytest.mark.parametrize("api", ["chat/completions", "responses"])
-async def test_all_features_use_the_single_configured_model(tmp_path, api):
+async def test_all_features_use_the_single_configured_model_and_maximum_reasoning(tmp_path, api):
     key = tmp_path / "key"
     key.write_text("offline-go-key")
     http = HTTP()
@@ -136,6 +137,10 @@ async def test_all_features_use_the_single_configured_model(tmp_path, api):
             await provider.complete(task, {}, selection)
             request = json.loads(http.request.call_args.args[2])
             assert request["model"] == "minimax-m3.1-flash"
+            if api == "responses":
+                assert request["reasoning"] == {"effort": "max"}
+            else:
+                assert request["reasoning_effort"] == "max"
 
 
 @pytest.mark.parametrize("task", ["analyze", "judge", "grade", "battle"])
