@@ -32,8 +32,8 @@ def summary(match, *, draft=False):
     )
     for index, player in enumerate(match["players"]):
         embed.add_field(
-            name=f"Position {index + 1} · member {player}",
-            value=text(match["positions"][index] or "Not set", 700),
+            name=f"Position {index + 1}",
+            value=f"<@{player}>\n{text(match['positions'][index] or 'Not set', 700)}",
             inline=False,
         )
     turns = settings["turns"]
@@ -83,7 +83,8 @@ def summary(match, *, draft=False):
     if not draft:
         embed.add_field(
             name="Confirmed this revision",
-            value=", ".join(match["confirmed"]) or "Neither participant",
+            value=", ".join(f"<@{player}>" for player in match["confirmed"])
+            or "Neither participant",
             inline=False,
         )
         if match.get("next"):
@@ -97,7 +98,7 @@ def summary(match, *, draft=False):
             proposal = match["proposal"]
             embed.add_field(
                 name="Pending agreement",
-                value=f"Member {proposal['by']} proposes {proposal['action']}: "
+                value=f"<@{proposal['by']}> proposes {proposal['action']}: "
                 f"{text(proposal['data'], 300)}. The opponent must agree to these exact terms.",
                 inline=False,
             )
@@ -175,7 +176,7 @@ class DraftView(Panel):
         super().__init__(draft.client, draft.owner)
         self.draft, self.revision = draft, draft.revision
         self.button("Edit challenger's claim", self.edit, row=0)
-        self.button("Features and parameters", self.features, row=0)
+        self.button("Features", self.features, row=0)
         if has_long_claim(draft.snapshot()):
             self.button("Read full claim", self.full_claim, row=0)
         self.button("Send challenge", self.send, style=discord.ButtonStyle.success, row=1)

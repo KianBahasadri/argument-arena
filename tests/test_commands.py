@@ -37,7 +37,13 @@ from argument_arena.member_ui import (
 )
 from argument_arena.providers import ProviderError
 from argument_arena.settings import DEFAULTS, WEIGHTS, Actor, ArenaError
-from argument_arena.settings_ui import FeatureView, SettingsTarget, parameters, show_settings
+from argument_arena.settings_ui import (
+    FeatureControls,
+    FeatureView,
+    SettingsTarget,
+    parameters,
+    show_settings,
+)
 from argument_arena.ui import Panel, parse_json
 from tests.helpers import ADMIN, STAFF, A, B, active, drain, message, pending
 
@@ -52,6 +58,7 @@ def interaction(user=10, admin=False, guild=123, channel=999, roles=()):
         response=SimpleNamespace(
             is_done=Mock(return_value=False),
             send_message=AsyncMock(),
+            edit_message=AsyncMock(),
             send_modal=AsyncMock(),
             defer=AsyncMock(),
         ),
@@ -64,12 +71,16 @@ def interaction(user=10, admin=False, guild=123, channel=999, roles=()):
     request.response.defer.side_effect = done
     request.response.send_modal.side_effect = done
     request.response.send_message.side_effect = done
+    request.response.edit_message.side_effect = done
     return request
 
 
 def packet(request):
     call = request.followup.send.call_args or request.response.send_message.call_args
-    assert call.kwargs["ephemeral"] is True
+    if call:
+        assert call.kwargs["ephemeral"] is True
+    else:
+        call = request.response.edit_message.call_args
     assert call.kwargs["allowed_mentions"].everyone is False
     return call
 
@@ -84,14 +95,19 @@ def content(request):
         return call.kwargs["file"].fp.read().decode()
     if "embed" in call.kwargs:
         return str(call.kwargs["embed"].to_dict())
+    if isinstance(call.kwargs.get("view"), discord.ui.LayoutView):
+        return str(call.kwargs["view"].to_components())
     return call.args[0]
 
 
 async def choose(panel, request, value, index=0):
+    items = (
+        list(panel.walk_children()) if isinstance(panel, discord.ui.LayoutView) else panel.children
+    )
     button = next(
         (
             item
-            for item in panel.children
+            for item in items
             if isinstance(item, discord.ui.Button) and item.custom_id == f"action:{value}"
         ),
         None,
@@ -117,7 +133,7 @@ async def choose(panel, request, value, index=0):
     if button is not None:
         await button.callback(request)
         return
-    selector = [item for item in panel.children if isinstance(item, discord.ui.Select)][index]
+    selector = [item for item in items if isinstance(item, discord.ui.Select)][index]
     assert value in [option.value for option in selector.options]
     selector._values = [value]
     await selector.callback(request)
@@ -270,9 +286,20 @@ async def test_draft_features_are_typed_and_dependencies_and_ranked_rules_apply(
     target = SettingsTarget(client, A.id, draft=proposal)
     request = interaction()
     await show_settings(request, target)
-    assert {o.value for o in view(request).children[0].options} == set(DEFAULTS)
-    feature = FeatureView(target, proposal.snapshot(), "research", True)
-    await feature.toggle(interaction())
+    controls = view(request)
+    assert isinstance(controls, FeatureControls)
+    assert controls.total_children_count <= 40
+    assert {
+        item.custom_id.removeprefix("action:")
+        for item in controls.walk_children()
+        if isinstance(item, discord.ui.Button)
+        and item.custom_id != "action:advanced"
+        and item.custom_id != "action:summary"
+    } == set(DEFAULTS)
+    changed = interaction()
+    await choose(controls, changed, "research")
+    changed.response.edit_message.assert_awaited_once()
+    assert isinstance(view(changed), FeatureControls)
     assert not proposal.settings["research"]["enabled"]
     assert not proposal.settings["corrections"]["enabled"]
     feature = FeatureView(target, proposal.snapshot(), "inactivity", True)
@@ -299,6 +326,90 @@ async def test_draft_features_are_typed_and_dependencies_and_ranked_rules_apply(
     await judge.parameter(model_request, "model")
     assert [item.custom_id for item in view(model_request).children] == ["action:0"]
     assert dict(parameters(DEFAULTS["judging"]))[("weights",)] == WEIGHTS
+
+
+async def test_feature_controls_toggle_in_place_apply_presets_and_keep_advanced_options(client):
+    proposal = draft(client)
+    target = SettingsTarget(client, A.id, draft=proposal)
+    request = interaction()
+    await show_settings(request, target)
+    controls = view(request)
+    assert "embed" not in packet(request).kwargs
+    off = interaction()
+    await choose(controls, off, "civility")
+    assert not proposal.settings["civility"]["enabled"]
+    off_button = next(
+        item
+        for item in view(off).walk_children()
+        if isinstance(item, discord.ui.Button) and item.custom_id == "action:civility"
+    )
+    assert off_button.label.endswith("Off")
+    assert off_button.style == discord.ButtonStyle.secondary
+    coached = interaction()
+    await choose(view(off), coached, "coaching")
+    assert proposal.settings["coaching"]["enabled"]
+    reset = interaction()
+    await choose(view(coached), reset, "default")
+    assert proposal.settings == DEFAULTS
+    advanced = interaction()
+    await choose(view(reset), advanced, "advanced")
+    assert {option.value for option in view(advanced).children[0].options} == set(DEFAULTS)
+    details = interaction()
+    await choose(view(advanced), details, "research")
+    assert isinstance(view(details), FeatureView)
+
+
+async def test_feature_controls_reject_stale_changes_and_enforce_private_panel_owner(
+    client, product
+):
+    match = await pending(product.arena)
+    target = SettingsTarget(client, A.id, match_id=match["id"])
+    request = interaction()
+    await show_settings(request, target)
+    controls = view(request)
+    for denied in (interaction(30), interaction(guild=456)):
+        assert not await controls.interaction_check(denied)
+        assert "panel" in content(denied)
+    await product.arena.settings(B, match["id"], {"coaching": {"enabled": True}})
+    with pytest.raises(ArenaError, match="Settings changed"):
+        await choose(controls, interaction(), "research")
+    current = await product.arena.repo.match(match["id"])
+    assert current["settings"]["research"]["enabled"]
+    assert current["settings"]["coaching"]["enabled"]
+
+
+async def test_feature_controls_are_read_only_for_spectators_and_after_acceptance(client, product):
+    match = await pending(product.arena)
+    spectator = interaction(30)
+    target = SettingsTarget(client, "30", match_id=match["id"])
+    await show_settings(spectator, target)
+    controls = view(spectator)
+    toggles = [
+        item
+        for item in controls.walk_children()
+        if isinstance(item, discord.ui.Button)
+        and item.custom_id not in {"action:advanced", "action:summary"}
+    ]
+    assert len(toggles) == len(DEFAULTS) and all(item.disabled for item in toggles)
+    with pytest.raises(ArenaError, match="participants"):
+        await choose(controls, interaction(30), "research")
+    await product.arena.accept(A, match["id"], 1)
+    await product.arena.accept(B, match["id"], 1)
+    await product.arena.attach_channel(match["id"], "900")
+    owner = interaction()
+    await show_settings(owner, SettingsTarget(client, A.id, match_id=match["id"]))
+    with pytest.raises(ArenaError, match="locked"):
+        await choose(view(owner), interaction(), "research")
+
+
+async def test_feature_controls_recheck_admin_role_before_changing_server_defaults(client, product):
+    target = SettingsTarget(client, ADMIN.id, server=True)
+    request = interaction(40, True)
+    await show_settings(request, target)
+    assert view(request).total_children_count <= 40
+    with pytest.raises(ArenaError, match="Administrator"):
+        await choose(view(request), interaction(40), "research")
+    assert (await product.arena.config(A.guild))["defaults"]["research"]["enabled"]
 
 
 @pytest.mark.parametrize("claim", ["Publish the revised public record", "r" * 4000])

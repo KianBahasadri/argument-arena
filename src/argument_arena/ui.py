@@ -378,7 +378,9 @@ def readable(value):
 async def respond(interaction, value, view=None):
     kwargs = {"ephemeral": True, "allowed_mentions": discord.AllowedMentions.none()}
     content = None
-    if isinstance(value, discord.Embed):
+    if isinstance(value, discord.ui.LayoutView):
+        kwargs["view"] = value
+    elif isinstance(value, discord.Embed):
         kwargs["embed"] = value
     else:
         content = readable(value)
@@ -408,10 +410,8 @@ async def safe(interaction, operation, view=None):
     await respond(interaction, value, view)
 
 
-class Panel(discord.ui.View):
-    def __init__(self, client, owner, *, timeout=900):
-        super().__init__(timeout=timeout)
-        self.client, self.owner = client, str(owner)
+class PanelAccess:
+    """Shared owner, server and expiry checks for private Discord views."""
 
     async def interaction_check(self, interaction):
         if interaction.guild_id != self.client.config.guild_id:
@@ -430,6 +430,12 @@ class Panel(discord.ui.View):
             interaction,
             str(error) if isinstance(error, ArenaError) else interaction_error(error),
         )
+
+
+class Panel(PanelAccess, discord.ui.View):
+    def __init__(self, client, owner, *, timeout=900):
+        super().__init__(timeout=timeout)
+        self.client, self.owner = client, str(owner)
 
     def button(
         self, label, callback, *, style=discord.ButtonStyle.secondary, row=None, custom_id=None

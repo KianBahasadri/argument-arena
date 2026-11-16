@@ -7,7 +7,7 @@ import discord
 from argument_arena.arena import participant
 from argument_arena.messages import ADMIN_REQUIRED, RULES_LOCKED
 from argument_arena.settings import ENUMS, WEIGHTS, ArenaError, match_settings, ranked_settings
-from argument_arena.ui import Field, Form, Panel, actor, number, respond, text
+from argument_arena.ui import Field, Form, Panel, PanelAccess, actor, number, respond, text
 
 FEATURES = {
     "claims": "Claim ledger",
@@ -32,10 +32,9 @@ FEATURES = {
     "archive": "Automatic archival",
 }
 DEPENDENCIES = (
-    "Research off also turns factual corrections off. Judging off also turns ranked play off. "
-    "Ranked-v1 requires its shared judging, coaching, live-score, turn, deadline and limit rules. "
-    "Reminder lead time must be shorter than the response window. "
-    "All AI features use the operator's single OpenCode Go model."
+    "Turning off research also turns off factual corrections. "
+    "Turning off judging makes the match unranked. "
+    "Ranked matches use shared competition rules."
 )
 
 
@@ -104,6 +103,111 @@ class SettingsTarget:
         return current
 
 
+def toggle_patch(settings, feature):
+    if feature == "ranked" and not settings["ranked"]["enabled"]:
+        ranked = ranked_settings()
+        return {
+            name: ranked[name]
+            for name in (
+                "ranked",
+                "judging",
+                "coaching",
+                "live_scores",
+                "turns",
+                "inactivity",
+                "limits",
+            )
+        }
+    return {feature: {"enabled": not settings[feature]["enabled"]}}
+
+
+class FeatureControls(PanelAccess, discord.ui.LayoutView):
+    def __init__(self, target, current, editable, presets):
+        super().__init__(timeout=900)
+        self.client, self.owner = target.client, target.owner
+        self.target, self.current = target, current
+        title = "Server default features" if target.server else "Match features"
+        guidance = (
+            "Tap a feature to turn it on or off. Green means on."
+            if editable
+            else "These are the current settings. Advanced options shows their parameters."
+        )
+        note = (
+            "Changes apply to new challenges."
+            if target.server
+            else "Changes stay in your draft until you send the challenge."
+            if target.draft is not None
+            else "Both participants must confirm any changes before the match starts."
+        )
+        self.add_item(discord.ui.TextDisplay(f"## {title}\n{guidance}\n-# {note}"))
+        features = list(FEATURES)
+        for heading, names in (
+            ("Assistance and judging", features[:10]),
+            ("Match rules and audience", features[10:]),
+        ):
+            group = discord.ui.Container(discord.ui.TextDisplay(f"### {heading}"))
+            for index in range(0, len(names), 2):
+                buttons = [self.feature_button(name, editable) for name in names[index : index + 2]]
+                group.add_item(discord.ui.ActionRow(*buttons))
+            self.add_item(group)
+        preset = discord.ui.Select(
+            placeholder="Apply a preset",
+            options=[
+                discord.SelectOption(
+                    label="Server defaults"
+                    if name == "default"
+                    else name.replace("_", " ").title(),
+                    value=name,
+                )
+                for name in presets
+            ],
+            disabled=not editable,
+            custom_id="feature-preset",
+        )
+
+        async def selected(interaction):
+            await self.target.editable(interaction)
+            await self.target.update(
+                interaction, match_settings(presets[preset.values[0]]), self.current["revision"]
+            )
+            await show_settings(interaction, self.target, replace=True)
+
+        preset.callback = selected
+        self.add_item(discord.ui.ActionRow(preset))
+        advanced = discord.ui.Button(label="Advanced options", custom_id="action:advanced")
+        advanced.callback = self.advanced
+        navigation = discord.ui.ActionRow(advanced)
+        if not target.server:
+            back = discord.ui.Button(label="Back to summary", custom_id="action:summary")
+            back.callback = target.show
+            navigation.add_item(back)
+        self.add_item(navigation)
+
+    def feature_button(self, feature, editable):
+        enabled = self.current["settings"][feature]["enabled"]
+        button = discord.ui.Button(
+            label=f"{FEATURES[feature]} · {'On' if enabled else 'Off'}",
+            style=discord.ButtonStyle.success if enabled else discord.ButtonStyle.secondary,
+            disabled=not editable,
+            custom_id=f"action:{feature}",
+        )
+
+        async def selected(interaction):
+            await self.target.editable(interaction)
+            await self.target.update(
+                interaction,
+                toggle_patch(self.current["settings"], feature),
+                self.current["revision"],
+            )
+            await show_settings(interaction, self.target, replace=True)
+
+        button.callback = selected
+        return button
+
+    async def advanced(self, interaction):
+        await show_advanced_settings(interaction, self.target)
+
+
 class FeatureView(Panel):
     def __init__(self, target, current, feature, editable):
         super().__init__(target.client, target.owner)
@@ -122,8 +226,12 @@ class FeatureView(Panel):
                     self.parameter,
                     row=1,
                 )
+        self.button("Back to features", self.features, row=3)
         self.button("Back to summary", target.show, row=3)
         self.button("Full feature details", self.details, row=3)
+
+    async def features(self, interaction):
+        await show_settings(interaction, self.target)
 
     async def details(self, interaction):
         current = await self.target.read()
@@ -131,27 +239,12 @@ class FeatureView(Panel):
 
     async def toggle(self, interaction):
         current = await self.target.editable(interaction)
-        patch = {self.feature: {"enabled": not current["settings"][self.feature]["enabled"]}}
-        if self.feature == "ranked" and not current["settings"]["ranked"]["enabled"]:
-            ranked = ranked_settings()
-            patch = {
-                name: ranked[name]
-                for name in (
-                    "ranked",
-                    "judging",
-                    "coaching",
-                    "live_scores",
-                    "turns",
-                    "inactivity",
-                    "limits",
-                )
-            }
         await self.target.update(
             interaction,
-            patch,
+            toggle_patch(current["settings"], self.feature),
             current["revision"],
         )
-        await self.target.show(interaction)
+        await show_settings(interaction, self.target)
 
     async def parameter(self, interaction, name):
         current = await self.target.editable(interaction)
@@ -174,7 +267,7 @@ class FeatureView(Panel):
                 part = part[key]
             part[keys[-1]] = new
             await self.target.update(request, {self.feature: patch}, current["revision"])
-            await self.target.show(request)
+            await show_settings(request, self.target)
 
         choices = None
         if isinstance(value, bool):
@@ -251,9 +344,8 @@ class FeatureView(Panel):
         )
 
 
-async def show_settings(interaction, target):
-    current = await target.read()
-    editable = (
+def settings_editable(interaction, target, current):
+    return (
         target.draft is not None
         or (target.server and actor(interaction).admin)
         or (
@@ -262,6 +354,29 @@ async def show_settings(interaction, target):
             and current.get("state") == "challenge"
         )
     )
+
+
+async def show_settings(interaction, target, *, replace=False):
+    current = await target.read()
+    if target.draft is not None:
+        presets = target.draft.presets
+    else:
+        config = await target.client.arena.config(str(interaction.guild_id))
+        presets = {"default": config["defaults"], **config["presets"]}
+    panel = FeatureControls(
+        target, current, settings_editable(interaction, target, current), presets
+    )
+    if replace and not interaction.response.is_done():
+        await interaction.response.edit_message(
+            view=panel, allowed_mentions=discord.AllowedMentions.none()
+        )
+    else:
+        await respond(interaction, panel)
+
+
+async def show_advanced_settings(interaction, target):
+    current = await target.read()
+    editable = settings_editable(interaction, target, current)
     panel = Panel(target.client, target.owner)
 
     async def selected(request, feature):
@@ -286,8 +401,17 @@ async def show_settings(interaction, target):
         ],
         selected,
     )
+
+    async def back(request):
+        await show_settings(request, target)
+
+    panel.button("Back to features", back, row=1)
     if not target.server:
         panel.button("Back to summary", target.show, row=1)
     await respond(
-        interaction, discord.Embed(title="Match features", description=DEPENDENCIES), panel
+        interaction,
+        discord.Embed(
+            title="Advanced match options", description="Choose a feature to review its parameters."
+        ),
+        panel,
     )
