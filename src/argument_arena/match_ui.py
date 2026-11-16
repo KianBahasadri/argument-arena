@@ -8,12 +8,20 @@ from dataclasses import dataclass, field
 
 import discord
 
-from argument_arena.arena import require_staff, validate_debate
+from argument_arena.arena import MAX_CLAIM_LENGTH, require_staff, validate_debate
 from argument_arena.messages import MISSING_ROUTES, PROPOSAL_CHANGED, job_guidance
 from argument_arena.repository import encode
 from argument_arena.settings import ArenaError, match_settings
 from argument_arena.settings_ui import DEPENDENCIES, FEATURES, SettingsTarget, show_settings
 from argument_arena.ui import Confirm, Field, Form, Panel, actor, number, respond, safe, text
+
+
+def has_long_claim(match):
+    return len(discord.utils.escape_markdown(match["positions"][0])) > 700
+
+
+async def show_full_claim(interaction, claim):
+    await respond(interaction, discord.Embed(title="Challengers Claim", description=claim))
 
 
 def summary(match, *, draft=False):
@@ -96,6 +104,8 @@ def summary(match, *, draft=False):
         if match.get("channel"):
             embed.add_field(name="Debate channel", value=f"<#{match['channel']}>")
     embed.add_field(name="Started from", value=match["origin"], inline=False)
+    if has_long_claim(match):
+        embed.set_footer(text="Claim preview. Choose Read full claim to review the complete text.")
     return embed
 
 
@@ -148,7 +158,7 @@ def debate_fields(match):
             "Challengers Claim",
             match["positions"][0],
             min_length=3,
-            max_length=500,
+            max_length=MAX_CLAIM_LENGTH,
             paragraph=True,
         ),
     ]
@@ -166,6 +176,8 @@ class DraftView(Panel):
         self.draft, self.revision = draft, draft.revision
         self.button("Edit challenger's claim", self.edit, row=0)
         self.button("Features and parameters", self.features, row=0)
+        if has_long_claim(draft.snapshot()):
+            self.button("Read full claim", self.full_claim, row=0)
         self.button("Send challenge", self.send, style=discord.ButtonStyle.success, row=1)
         self.button("Cancel setup", self.cancel, style=discord.ButtonStyle.danger, row=1)
         self.select(
@@ -192,6 +204,10 @@ class DraftView(Panel):
     async def features(self, interaction):
         self.draft.check()
         await show_settings(interaction, SettingsTarget(self.client, self.owner, draft=self.draft))
+
+    async def full_claim(self, interaction):
+        self.draft.check()
+        await show_full_claim(interaction, self.draft.positions[0])
 
     async def preset(self, interaction, name):
         async with self.draft.lock:
@@ -371,6 +387,12 @@ class MatchView(Panel):
         elif secondary:
             self.button("More actions", self.more, row=2)
         self.button("Choose another match", self.browse, row=4 if expanded else 2)
+        if has_long_claim(match):
+            self.button("Read full claim", self.full_claim, row=4 if expanded else 2)
+
+    async def full_claim(self, interaction):
+        current = await self.client.arena.repo.match(self.match["id"], str(interaction.guild_id))
+        await show_full_claim(interaction, current["positions"][0])
 
     async def back(self, interaction):
         await show_match(interaction, self.client, self.match["id"])

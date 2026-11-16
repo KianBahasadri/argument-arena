@@ -23,6 +23,7 @@ from argument_arena.settings import (
     validate_server,
 )
 
+MAX_CLAIM_LENGTH = 4000
 OPEN = {"challenge", "starting", "active", "paused", "judging"}
 
 
@@ -47,14 +48,15 @@ def require_staff(actor, config):
 def validate_debate(topic, positions):
     if (
         not isinstance(topic, str)
-        or not 3 <= len(topic) <= 500
+        or not 3 <= len(topic) <= MAX_CLAIM_LENGTH
         or not isinstance(positions, list)
         or len(positions) != 2
-        or any(not isinstance(p, str) or not 1 <= len(p) <= 500 for p in positions)
+        or any(not isinstance(p, str) or not 1 <= len(p) <= MAX_CLAIM_LENGTH for p in positions)
     ):
         raise ArenaError(
             "The debate details are incomplete or outside the allowed length. Enter the "
-            "challenger's claim using 3–500 characters. Reopen Edit challenger's claim and "
+            f"challenger's claim using 3–{MAX_CLAIM_LENGTH} characters. "
+            "Reopen Edit challenger's claim and "
             "fill in the claim before sending or confirming the challenge."
         )
 

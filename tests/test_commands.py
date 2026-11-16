@@ -176,8 +176,9 @@ async def test_registered_surface_is_seven_guild_only_commands_with_one_required
 
 
 @pytest.mark.parametrize("channel", [999, 888])
+@pytest.mark.parametrize("claim", ["Publish a shared public record", "*" * 3990 + " FINAL END"])
 async def test_challenge_modal_uses_defaults_and_retains_channel_or_thread_origin(
-    client, product, channel
+    client, product, channel, claim
 ):
     await product.arena.setup(ADMIN, {"defaults": {"inactivity": {"hours": 48}}})
     request = interaction(channel=channel)
@@ -187,30 +188,47 @@ async def test_challenge_modal_uses_defaults_and_retains_channel_or_thread_origi
     form = request.response.send_modal.call_args.args[0]
     assert len(form.children) == 1
     assert form.inputs["claim"].to_component_dict()["label"] == "Challengers Claim"
+    assert form.inputs["claim"].max_length == 4000
     submitted = interaction(channel=channel)
     await submit_form(
         form,
         submitted,
-        claim="Publish a shared public record",
+        claim=claim,
     )
     panel = view(submitted)
     assert isinstance(panel, DraftView)
     assert panel.draft.settings["inactivity"]["hours"] == 48
     assert panel.draft.origin.endswith(f"/{channel}")
+    if len(claim) > 700:
+        reading = interaction(channel=channel)
+        await next(item for item in panel.children if item.label == "Read full claim").callback(
+            reading
+        )
+        assert packet(reading).kwargs["embed"].description == claim
     async with product.arena.repo.unit() as unit:
         assert not await unit.rows("SELECT id FROM matches")
         assert not await unit.rows("SELECT id FROM jobs")
-    await panel.send(interaction(channel=channel))
+    sent = interaction(channel=channel)
+    await panel.send(sent)
     async with product.arena.repo.unit() as unit:
         rows = await unit.rows("SELECT id FROM matches")
         assert len(rows) == 1
         assert not await unit.rows("SELECT id FROM jobs WHERE kind='create'")
     match = await product.arena.repo.match(rows[0]["id"])
-    assert match["topic"] == "Publish a shared public record"
-    assert match["positions"] == ["Publish a shared public record", "Challenges the claim."]
+    assert match["topic"] == claim
+    assert match["positions"] == [claim, "Challenges the claim."]
     assert match["origin"].endswith(f"/{channel}")
     assert match["confirmed"] == [] and match["channel"] is None
     assert match["settings"]["inactivity"]["hours"] == 48
+    if len(claim) > 700:
+        reading = interaction(channel=channel)
+        await next(
+            item for item in view(sent).children if item.label == "Read full claim"
+        ).callback(reading)
+        assert packet(reading).kwargs["embed"].description == claim
+        editing = interaction(channel=channel)
+        await view(sent).selected(editing, "edit")
+        assert editing.response.send_modal.call_args.args[0].inputs["claim"].default == claim
 
 
 async def test_draft_validation_cancel_expiry_and_double_send_leave_no_active_channel(
@@ -221,10 +239,11 @@ async def test_draft_validation_cancel_expiry_and_double_send_leave_no_active_ch
     form_request = interaction()
     await panel.edit(form_request)
     form = form_request.response.send_modal.call_args.args[0]
-    invalid = interaction()
-    await submit_form(form, invalid, claim="x")
-    assert "3–500" in content(invalid)
-    assert proposal.topic == "Keep a public record"
+    for invalid_claim in ("x", " " * 10, "x" * 4001):
+        invalid = interaction()
+        await submit_form(form, invalid, claim=invalid_claim)
+        assert "3–4000" in content(invalid)
+        assert proposal.topic == "Keep a public record"
     await panel.cancel(interaction())
     with pytest.raises(ArenaError, match="cancelled"):
         await panel.send(interaction())
@@ -282,8 +301,9 @@ async def test_draft_features_are_typed_and_dependencies_and_ranked_rules_apply(
     assert dict(parameters(DEFAULTS["judging"]))[("weights",)] == WEIGHTS
 
 
+@pytest.mark.parametrize("claim", ["Publish the revised public record", "r" * 4000])
 async def test_negotiation_rejects_stale_confirmation_and_requires_both_on_same_revision(
-    client, product
+    client, product, claim
 ):
     match = await pending(product.arena)
     config = await product.arena.config(A.guild)
@@ -299,12 +319,12 @@ async def test_negotiation_rejects_stale_confirmation_and_requires_both_on_same_
     await submit_form(
         form,
         interaction(20),
-        claim="Publish the revised public record",
+        claim=claim,
     )
     current = await product.arena.repo.match(match["id"])
     assert current["revision"] == 2 and current["confirmed"] == []
-    assert current["topic"] == "Publish the revised public record"
-    assert current["positions"] == ["Publish the revised public record", "Challenges the claim."]
+    assert current["topic"] == claim
+    assert current["positions"] == [claim, "Challenges the claim."]
     with pytest.raises(ArenaError, match="Settings changed"):
         await a_view.selected(interaction(), "accept")
     await MatchView(client, current, A, config).selected(interaction(), "accept")
@@ -688,6 +708,9 @@ async def test_summary_and_panels_fit_discord_limits_and_errors_do_not_expose_de
     client, product
 ):
     match = await active(product.arena)
+    match["topic"] = match["positions"][0] = "*" * 4000
+    async with product.arena.repo.unit() as unit:
+        await unit.save_match(match)
     embed = summary(match)
     assert len(embed) <= 6000
     assert all(len(field.value) <= 1024 for field in embed.fields)
