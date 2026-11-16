@@ -185,13 +185,13 @@ async def test_challenge_modal_uses_defaults_and_retains_channel_or_thread_origi
     command = client.tree.get_command("challenge", guild=client.guild)
     await command._do_call(request, {"member": member})
     form = request.response.send_modal.call_args.args[0]
+    assert len(form.children) == 1
+    assert form.inputs["claim"].to_component_dict()["label"] == "Challengers Claim"
     submitted = interaction(channel=channel)
     await submit_form(
         form,
         submitted,
-        topic="A shared public record",
-        first="Publish it",
-        second="Keep it private",
+        claim="Publish a shared public record",
     )
     panel = view(submitted)
     assert isinstance(panel, DraftView)
@@ -206,6 +206,8 @@ async def test_challenge_modal_uses_defaults_and_retains_channel_or_thread_origi
         assert len(rows) == 1
         assert not await unit.rows("SELECT id FROM jobs WHERE kind='create'")
     match = await product.arena.repo.match(rows[0]["id"])
+    assert match["topic"] == "Publish a shared public record"
+    assert match["positions"] == ["Publish a shared public record", "Challenges the claim."]
     assert match["origin"].endswith(f"/{channel}")
     assert match["confirmed"] == [] and match["channel"] is None
     assert match["settings"]["inactivity"]["hours"] == 48
@@ -220,7 +222,7 @@ async def test_draft_validation_cancel_expiry_and_double_send_leave_no_active_ch
     await panel.edit(form_request)
     form = form_request.response.send_modal.call_args.args[0]
     invalid = interaction()
-    await submit_form(form, invalid, topic="x", first="Yes", second="No")
+    await submit_form(form, invalid, claim="x")
     assert "3–500" in content(invalid)
     assert proposal.topic == "Keep a public record"
     await panel.cancel(interaction())
@@ -291,15 +293,18 @@ async def test_negotiation_rejects_stale_confirmation_and_requires_both_on_same_
     b_view = MatchView(client, match, B, config)
     edit = interaction(20)
     await b_view.selected(edit, "edit")
+    form = edit.response.send_modal.call_args.args[0]
+    assert len(form.children) == 1
+    assert form.inputs["claim"].default == match["positions"][0]
     await submit_form(
-        edit.response.send_modal.call_args.args[0],
+        form,
         interaction(20),
-        topic="A revised topic",
-        first="For",
-        second="Against",
+        claim="Publish the revised public record",
     )
     current = await product.arena.repo.match(match["id"])
     assert current["revision"] == 2 and current["confirmed"] == []
+    assert current["topic"] == "Publish the revised public record"
+    assert current["positions"] == ["Publish the revised public record", "Challenges the claim."]
     with pytest.raises(ArenaError, match="Settings changed"):
         await a_view.selected(interaction(), "accept")
     await MatchView(client, current, A, config).selected(interaction(), "accept")

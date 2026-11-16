@@ -8,7 +8,8 @@ HELP = {
     "start": (
         "Match quick start",
         "1. Run `/challenge @member` in a server channel or discussion thread.\n2. "
-        "Fill in the topic and both positions. Choose a preset and review Features "
+        "Enter the challenger's claim. The opponent challenges that claim. "
+        "Choose a preset and review Features "
         "for optional assistance, deadlines, limits and ranked play.\n3. Review the "
         "summary, edit or cancel, then Send challenge.\n4. Both members open "
         "`/match`, select the challenge and confirm the same revision. Either can "

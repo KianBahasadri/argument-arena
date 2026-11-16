@@ -43,7 +43,7 @@ MISSING_ROUTES = (
     "After saving, run `/challenge @member` again. No challenge has been created yet."
 )
 RULES_LOCKED = (
-    "Accepted rules are locked. The topic, positions and features can only be changed "
+    "Accepted rules are locked. The claim and features can only be changed "
     "while a challenge is awaiting confirmation, so neither participant's agreement "
     "can be changed during a debate. You can still view Features in `/match`. "
     "Start a new challenge to use different rules. If you also want to end an ongoing "

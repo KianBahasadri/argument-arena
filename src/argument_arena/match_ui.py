@@ -20,7 +20,7 @@ def summary(match, *, draft=False):
     settings = match["settings"]
     embed = discord.Embed(
         title="Review your challenge" if draft else f"Match · {match['state'].title()}",
-        description=text(match.get("topic") or "Add a topic and both positions to continue.", 700),
+        description=text(match.get("topic") or "Add the challenger's claim to continue.", 700),
     )
     for index, player in enumerate(match["players"]):
         embed.add_field(
@@ -126,7 +126,7 @@ class Draft:
             raise ArenaError(
                 "Your draft changed after this panel was opened, so this action was not "
                 "applied to an older version. Use the newest setup summary to review the "
-                "topic, positions and Features before sending. If you no longer have that "
+                "claim and Features before sending. If you no longer have that "
                 "panel, start a fresh `/challenge @member`."
             )
 
@@ -144,22 +144,27 @@ class Draft:
 def debate_fields(match):
     return [
         Field(
-            "topic", "Debate topic", match["topic"], min_length=3, max_length=500, paragraph=True
-        ),
-        Field(
-            "first", "Challenger's position", match["positions"][0], max_length=500, paragraph=True
-        ),
-        Field(
-            "second", "Opponent's position", match["positions"][1], max_length=500, paragraph=True
+            "claim",
+            "Challengers Claim",
+            match["positions"][0],
+            min_length=3,
+            max_length=500,
+            paragraph=True,
         ),
     ]
+
+
+def debate_details(claim):
+    positions = [claim, "Challenges the claim."]
+    validate_debate(claim, positions)
+    return claim, positions
 
 
 class DraftView(Panel):
     def __init__(self, draft):
         super().__init__(draft.client, draft.owner)
         self.draft, self.revision = draft, draft.revision
-        self.button("Edit topic and positions", self.edit, row=0)
+        self.button("Edit challenger's claim", self.edit, row=0)
         self.button("Features and parameters", self.features, row=0)
         self.button("Send challenge", self.send, style=discord.ButtonStyle.success, row=1)
         self.button("Cancel setup", self.cancel, style=discord.ButtonStyle.danger, row=1)
@@ -176,14 +181,12 @@ class DraftView(Panel):
         async def save(request, values):
             async with self.draft.lock:
                 self.draft.check(self.revision)
-                positions = [values["first"], values["second"]]
-                validate_debate(values["topic"], positions)
-                self.draft.topic, self.draft.positions = values["topic"], positions
+                self.draft.topic, self.draft.positions = debate_details(values["claim"])
                 self.draft.revision += 1
             await show_draft(request, self.draft)
 
         await interaction.response.send_modal(
-            Form(self, "Debate topic and positions", debate_fields(self.draft.snapshot()), save)
+            Form(self, "Challengers Claim", debate_fields(self.draft.snapshot()), save)
         )
 
     async def features(self, interaction):
@@ -258,7 +261,7 @@ async def start_challenge(interaction, client, member):
 ACTIONS = {
     "status": ("Status", "State, speaker, exact deadline and job status"),
     "settings": ("Features", "Review every feature and parameter"),
-    "edit": ("Edit topic and positions", "Propose a new revision; both must reconfirm"),
+    "edit": ("Edit challenger's claim", "Propose a new revision; both must reconfirm"),
     "preset": ("Choose a preset", "Replace features and reset both confirmations"),
     "accept": ("Confirm reviewed revision", "Confirm exactly the summary you reviewed"),
     "decline": ("Decline challenge", "Cancel this pending challenge"),
@@ -403,17 +406,18 @@ class MatchView(Panel):
         elif action == "edit":
 
             async def save(request, values):
+                topic, positions = debate_details(values["claim"])
                 await self.client.arena.settings(
                     actor(request),
                     current["id"],
-                    positions=[values["first"], values["second"]],
-                    topic=values["topic"],
+                    positions=positions,
+                    topic=topic,
                     expected_revision=current["revision"],
                 )
                 await show_match(request, self.client, current["id"])
 
             await interaction.response.send_modal(
-                Form(self, "Propose topic and positions", debate_fields(current), save)
+                Form(self, "Propose challenger's claim", debate_fields(current), save)
             )
         elif action == "preset":
             panel = Panel(self.client, self.owner)

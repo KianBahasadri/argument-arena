@@ -53,10 +53,9 @@ def validate_debate(topic, positions):
         or any(not isinstance(p, str) or not 1 <= len(p) <= 500 for p in positions)
     ):
         raise ArenaError(
-            "The debate details are incomplete or outside the allowed length. Enter a topic "
-            "of 3–500 characters and a position of 1–500 characters for each participant. "
-            "Reopen Edit topic and positions and fill in all three fields before sending or "
-            "confirming the challenge."
+            "The debate details are incomplete or outside the allowed length. Enter the "
+            "challenger's claim using 3–500 characters. Reopen Edit challenger's claim and "
+            "fill in the claim before sending or confirming the challenge."
         )
 
 
@@ -200,8 +199,8 @@ class Arena:
             if expected_revision is not None and expected_revision != match["revision"]:
                 raise ArenaError(
                     "Settings changed after this panel was opened, so this edit was not saved"
-                    " over the newer revision. Reopen `/match`, review the latest topic, "
-                    "positions and Features, then make your change there. Both participants "
+                    " over the newer revision. Reopen `/match`, review the latest claim "
+                    "and Features, then make your change there. Both participants "
                     "must confirm any edited revision again."
                 )
             match["settings"] = match_settings(patch, match["settings"])
@@ -244,7 +243,7 @@ class Arena:
                 raise ArenaError(
                     "Settings changed after you reviewed this challenge, so your confirmation"
                     " was not applied to different terms. Reopen `/match`, read the latest "
-                    "topic, positions and Features, then choose Confirm reviewed revision. "
+                    "claim and Features, then choose Confirm reviewed revision. "
                     "Both members must confirm the same revision before a channel is created."
                 )
             if actor.id not in match["confirmed"]:
