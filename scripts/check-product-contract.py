@@ -29,7 +29,7 @@ async def main():
                     else:
                         commands.append(command)
                 assert {c.qualified_name for c in commands} == {
-                    "challenge",
+                    "start",
                     "match",
                     "train",
                     "profile",
@@ -37,13 +37,10 @@ async def main():
                     "admin",
                     "help",
                 }, "Keep superseded actions inside menus, not visible slash subcommands"
-                assert (
-                    client.tree.get_command("challenge", guild=client.guild).parameters[0].name
-                    == "member"
-                )
+                assert not client.tree.get_command("start", guild=client.guild).parameters
     assert set(FEATURES) == set(DEFAULTS), "Every match feature needs a named UI control"
     assert "24-hour" in HELP["automatic"][1]
-    assert "same revision" in HELP["start"][1]
+    assert "/start" in HELP["start"][1] and "LFG" in HELP["start"][1]
     print(f"Product contract: {len(commands)} commands, {len(DEFAULTS)} settings")
 
 

@@ -37,7 +37,7 @@ async def test_setup_sync_and_reconnect_lifecycle(tmp_path):
         assert client.intents.guild_reactions and not client.intents.members
         commands = client.tree.get_commands(guild=client.guild)
         assert {command.name for command in commands} == {
-            "challenge",
+            "start",
             "match",
             "profile",
             "train",

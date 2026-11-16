@@ -59,7 +59,11 @@ class Profiles:
         async with self.repo.unit() as unit:
             match = await unit.match(match_id)
             result_row = await unit.one("SELECT * FROM results WHERE match_id=?", (match_id,))
-            if not result_row or not match["settings"]["profiles"]["enabled"]:
+            if (
+                not result_row
+                or len(match["players"]) != 2
+                or not match["settings"]["profiles"]["enabled"]
+            ):
                 return
             result = json.loads(result_row["data"])
             claims = [

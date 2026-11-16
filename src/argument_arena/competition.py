@@ -16,7 +16,8 @@ async def replay(unit, guild, now):
         policy = match["rating_policy"]
         pair = (tuple(sorted(match["players"])), int(row["created"] // 86400))
         eligible = (
-            match["settings"]["ranked"]["enabled"]
+            len(match["players"]) == 2
+            and match["settings"]["ranked"]["enabled"]
             and result["outcome"] in {"judged", "draw", "concession", "forfeit"}
             and not result.get("review_needed")
             and all(match["turn_counts"].get(p, 0) >= 1 for p in match["players"])

@@ -1,5 +1,6 @@
 """Discord side effects, permission policy, recovery and retryable deliveries."""
 
+import asyncio
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -18,7 +19,7 @@ def overwrites(guild, match, config, members, bot_member, closed=False):
     common = dict(
         view_channel=True,
         read_message_history=True,
-        send_messages=False,
+        send_messages=not closed and match["state"] == "lfg",
         add_reactions=settings["reactions"]["enabled"],
         create_public_threads=thread_open and settings["threads"]["create"],
         create_private_threads=False,
@@ -44,7 +45,7 @@ def overwrites(guild, match, config, members, bot_member, closed=False):
         result[member] = discord.PermissionOverwrite(
             **{
                 **common,
-                "send_messages": staff or (not closed and match["state"] == "active"),
+                "send_messages": staff or (not closed and match["state"] in {"lfg", "active"}),
                 "manage_channels": staff,
                 "manage_webhooks": staff,
                 "manage_messages": staff,
@@ -69,6 +70,7 @@ def overwrites(guild, match, config, members, bot_member, closed=False):
 class DiscordGateway:
     def __init__(self, client, arena):
         self.client, self.arena, self.repo = client, arena, arena.repo
+        self.create_lock = asyncio.Lock()
 
     def guild(self, guild_id):
         guild = self.client.get_guild(int(guild_id))
@@ -84,8 +86,12 @@ class DiscordGateway:
         )
 
     async def create(self, job):
+        async with self.create_lock:
+            await self._create(job)
+
+    async def _create(self, job):
         match = await self.repo.match(job["match_id"])
-        if match["state"] != "starting":
+        if match["state"] not in {"starting", "lfg"} or match["channel"]:
             return
         config = await self.arena.config(match["guild"])
         guild = self.guild(match["guild"])
@@ -96,20 +102,38 @@ class DiscordGateway:
             (c for c in channels if isinstance(c, discord.TextChannel) and c.topic == marker), None
         )
         if existing is None:
-            category = guild.get_channel(int(config["categories"]["active"]))
-            if not isinstance(category, discord.CategoryChannel):
-                raise ProviderError("active_category_unavailable", retry=False)
+            if match["state"] == "lfg":
+                category = next(
+                    (
+                        c
+                        for c in channels
+                        if isinstance(c, discord.CategoryChannel) and c.name == "LFG"
+                    ),
+                    None,
+                )
+                if category is None:
+                    category = await guild.create_category("LFG", reason="Open debate matchmaking")
+            else:
+                category = guild.get_channel(int(config["categories"]["active"]))
+                if not isinstance(category, discord.CategoryChannel):
+                    raise ProviderError("active_category_unavailable", retry=False)
             members = [
                 guild.get_member(int(p)) or await guild.fetch_member(int(p))
                 for p in match["players"]
             ]
-            permissions = overwrites(guild, {**match, "state": "active"}, config, members, guild.me)
+            permissions = overwrites(
+                guild,
+                {**match, "state": "lfg" if match["state"] == "lfg" else "active"},
+                config,
+                members,
+                guild.me,
+            )
             existing = await guild.create_text_channel(
                 config["channel_name"].replace("{id}", match["id"]),
                 category=category,
                 topic=marker,
                 overwrites=permissions,
-                reason=f"Accepted debate {match['id']}",
+                reason=f"Open debate {match['id']}",
             )
         await self.arena.attach_channel(match["id"], str(existing.id))
 
@@ -160,9 +184,18 @@ class DiscordGateway:
         match = await self.repo.match(job["match_id"])
         if not match["channel"]:
             return
+        activate = job.get("kind") == "activate"
+        if activate and match["state"] not in {"active", "paused", "judging"}:
+            return
         guild = self.guild(match["guild"])
         channel = await self.channel(match["channel"])
         config = await self.arena.config(match["guild"])
+        args = {}
+        if activate:
+            category = guild.get_channel(int(config["categories"]["active"]))
+            if not isinstance(category, discord.CategoryChannel):
+                raise ProviderError("active_category_unavailable", retry=False)
+            args["category"] = category
         members = []
         for player in match["players"]:
             try:
@@ -172,6 +205,7 @@ class DiscordGateway:
             except discord.NotFound:
                 pass
         await channel.edit(
+            **args,
             overwrites=overwrites(
                 guild, match, config, members, guild.me, closed=match["state"] == "closed"
             ),
@@ -239,19 +273,9 @@ class DiscordGateway:
             async for message in channel.history(
                 limit=None, oldest_first=True, after=datetime.fromtimestamp(match["created"], UTC)
             ):
-                if str(message.author.id) not in match["players"] or message.author.bot:
+                if message.author.bot:
                     continue
                 seen[str(message.id)] = message
-                await self.arena.message(
-                    match["guild"],
-                    match["channel"],
-                    str(message.id),
-                    str(message.author.id),
-                    message.content,
-                    message.jump_url,
-                    message.created_at.timestamp(),
-                    message.author.bot,
-                )
             async with self.repo.unit() as unit:
                 official = await unit.rows(
                     "SELECT id,content,deleted FROM messages WHERE match_id=?", (match["id"],)
@@ -262,6 +286,18 @@ class DiscordGateway:
                     await self.arena.edit_message(original["id"], deleted=True)
                 elif message and (message.content != original["content"] or original["deleted"]):
                     await self.arena.edit_message(original["id"], message.content)
+            # Reconcile the saved claim before admitting replies missed during an outage.
+            for message in seen.values():
+                await self.arena.message(
+                    match["guild"],
+                    match["channel"],
+                    str(message.id),
+                    str(message.author.id),
+                    message.content,
+                    message.jump_url,
+                    message.created_at.timestamp(),
+                    message.author.bot,
+                )
 
     async def enforce_message(self, message):
         """Enforce posting policy during the short window before overwrite reconciliation."""
@@ -277,7 +313,15 @@ class DiscordGateway:
         staff = getattr(getattr(author, "guild_permissions", None), "administrator", False) or any(
             str(role.id) in config["moderator_roles"] for role in getattr(author, "roles", [])
         )
-        allowed = staff or (str(author.id) in match["players"] and match["state"] == "active")
+        allowed = staff or (
+            not getattr(author, "bot", False)
+            and (
+                match["state"] == "lfg"
+                and (str(author.id) in match["players"] or bool(match["topic"]))
+                or str(author.id) in match["players"]
+                and match["state"] == "active"
+            )
+        )
         if not allowed:
             await message.delete()
         return allowed

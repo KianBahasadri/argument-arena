@@ -1,4 +1,4 @@
-"""Private challenge drafts and permission-aware match navigation."""
+"""Open matchmaking channels, legacy challenge drafts and private match navigation."""
 
 import asyncio
 import json
@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 import discord
 
 from argument_arena.arena import MAX_CLAIM_LENGTH, require_staff, validate_debate
-from argument_arena.messages import MISSING_ROUTES, PROPOSAL_CHANGED, job_guidance
+from argument_arena.messages import PROPOSAL_CHANGED, job_guidance
+from argument_arena.providers import ProviderError
 from argument_arena.repository import encode
 from argument_arena.settings import ArenaError, match_settings
 from argument_arena.settings_ui import DEPENDENCIES, FEATURES, SettingsTarget, show_settings
@@ -28,7 +29,7 @@ def summary(match, *, draft=False):
     settings = match["settings"]
     embed = discord.Embed(
         title="Review your challenge" if draft else f"Match · {match['state'].title()}",
-        description=text(match.get("topic") or "Add the challenger's claim to continue.", 700),
+        description=text(match.get("topic") or "Post your claim in the LFG channel.", 700),
     )
     for index, player in enumerate(match["players"]):
         embed.add_field(
@@ -75,18 +76,32 @@ def summary(match, *, draft=False):
         inline=False,
     )
     embed.add_field(
-        name="Review before confirming",
+        name="Match rules",
         value="Use Features to review every parameter, including rubric weights, privacy "
         "and provider limits. " + DEPENDENCIES,
         inline=False,
     )
     if not draft:
-        embed.add_field(
-            name="Confirmed this revision",
-            value=", ".join(f"<@{player}>" for player in match["confirmed"])
-            or "Neither participant",
-            inline=False,
-        )
+        if match["state"] == "lfg":
+            embed.add_field(
+                name="Waiting in LFG",
+                value=(
+                    "The first other person to reply will challenge this claim "
+                    "and start the battle."
+                    if match["topic"]
+                    else "Post your claim in the channel, then wait for someone to challenge it."
+                )
+                if match["channel"]
+                else "Your channel is being created. Reopen /match to check its status.",
+                inline=False,
+            )
+        elif match["state"] in {"challenge", "starting"}:
+            embed.add_field(
+                name="Confirmed this revision",
+                value=", ".join(f"<@{player}>" for player in match["confirmed"])
+                or "Neither participant",
+                inline=False,
+            )
         if match.get("next"):
             embed.add_field(name="Next required speaker", value=f"<@{match['next']}>")
         if match.get("deadline"):
@@ -247,32 +262,17 @@ async def show_draft(interaction, draft):
     await respond(interaction, summary(draft.snapshot(), draft=True), DraftView(draft))
 
 
-async def start_challenge(interaction, client, member):
-    who = actor(interaction)
-    if member.bot or who.bot or str(member.id) == who.id:
-        raise ArenaError(
-            "A challenge needs two different human members of this server. Choose someone "
-            "other than yourself or a bot with `/challenge @member`. For practice against the"
-            " bot, use `/train` → Start practice instead."
-        )
-    if getattr(getattr(member, "guild", None), "id", interaction.guild_id) != interaction.guild_id:
-        raise ArenaError(
-            "The selected opponent does not belong to this Discord server. Run `/challenge "
-            "@member` here and choose a current server member from Discord's suggestions; "
-            "matches cannot span different servers."
-        )
-    config = await client.arena.config(who.guild)
-    if not config["categories"]["active"]:
-        raise ArenaError(MISSING_ROUTES)
-    draft = Draft(
-        client,
-        who.id,
-        str(member.id),
+async def start_match(interaction, client):
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    match = await client.arena.open_match(
+        actor(interaction),
         f"https://discord.com/channels/{interaction.guild_id}/{interaction.channel_id}",
-        match_settings(config["defaults"]),
-        {"default": deepcopy(config["defaults"]), **deepcopy(config["presets"])},
     )
-    await DraftView(draft).edit(interaction)
+    try:
+        await client.gateway.create({"match_id": match["id"]})
+    except (discord.HTTPException, ProviderError):
+        pass  # The durable creation job retries and exposes any failure through Status.
+    await show_match(interaction, client, match["id"])
 
 
 ACTIONS = {
@@ -355,6 +355,7 @@ class MatchView(Panel):
         self.match = match
         available = available_actions(match, who, config, client.arena.clock())
         preferred = {
+            "lfg": ("status", "settings", "cancel"),
             "challenge": ("accept", "decline", "edit", "settings"),
             "active": ("submit", "agree", "pause", "claims"),
             "paused": ("agree", "resume", "claims", "status"),
@@ -367,6 +368,8 @@ class MatchView(Panel):
                 primary.append(key)
         secondary = [key for key in available if key not in primary]
         labels = {"accept": "Confirm challenge", "decline": "Decline", "edit": "Edit setup"}
+        if match["state"] == "lfg":
+            labels["cancel"] = "Cancel match"
         self.actions(
             [
                 (key, labels.get(key, ACTIONS[key][0]))
@@ -561,6 +564,8 @@ class MatchView(Panel):
                 await self.lifecycle(request, current, action)
 
             message = ACTIONS[action][1]
+            if action == "cancel" and current["state"] == "lfg":
+                message = "Cancel this LFG match immediately."
             if actor(interaction).staff(config) and action in {"finish", "draw", "cancel"}:
                 message += " Your staff authority applies this immediately; the action is audited."
             await respond(interaction, message, Confirm(self.client, self.owner, confirmed))
@@ -611,9 +616,13 @@ class MatchPicker(Panel):
                 "Choose a match",
                 [
                     discord.SelectOption(
-                        label=m["topic"][:100],
+                        label=(m["topic"] or f"Awaiting claim · {m['id']}")[:100],
                         value=m["id"],
-                        description=f"{m['state']} · {m['players'][0]} vs {m['players'][1]}"[:100],
+                        description=(
+                            f"{m['state']} · "
+                            + " vs ".join(m["players"])
+                            + (" · waiting for a challenger" if m["state"] == "lfg" else "")
+                        )[:100],
                     )
                     for m in visible
                 ],
@@ -622,6 +631,8 @@ class MatchPicker(Panel):
             )
         self.button("My matches" if all_matches else "All server matches", self.toggle, row=1)
         self.button("Search topics", self.search, row=1)
+        if selected is None:
+            self.button("Start a match", self.start, style=discord.ButtonStyle.success, row=1)
         if page:
             self.button("Previous page", self.previous, row=2)
         if (page + 1) * 20 < len(matches):
@@ -632,6 +643,9 @@ class MatchPicker(Panel):
             await self.selected(interaction, match_id)
         else:
             await show_match(interaction, self.client, match_id)
+
+    async def start(self, interaction):
+        await start_match(interaction, self.client)
 
     async def show(self, interaction, *, page=0, all_matches=None, topic=None):
         await show_picker(
@@ -685,7 +699,7 @@ async def show_picker(interaction, client, *, page=0, all_matches=False, topic="
         + (
             "Select a match; no ID is needed."
             if matches
-            else "No matches found. Use /challenge @member to start one, or browse server matches."
+            else "No matches found. Use /start to open an LFG channel, or browse server matches."
         ),
         MatchPicker(
             client,

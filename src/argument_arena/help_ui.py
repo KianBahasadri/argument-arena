@@ -7,16 +7,15 @@ from argument_arena.ui import Panel, actor, respond
 HELP = {
     "start": (
         "Match quick start",
-        "1. Run `/challenge @member` in a server channel or discussion thread.\n2. "
-        "Enter the challenger's claim. The opponent challenges that claim. "
-        "Choose a preset and review Features "
-        "for optional assistance, deadlines, limits and ranked play.\n3. Review the "
-        "summary, edit or cancel, then Send challenge.\n4. Both members open "
-        "`/match`, select the challenge and confirm the same revision. Either can "
-        "decline or propose edits; edits clear both confirmations.\n5. A debate "
-        "channel appears only after both confirm. Post official debate turns there."
-        " The origin link is preserved. Unsent setup expires after 15 minutes and "
-        "creates no channel.",
+        "1. Run `/start` or choose Start a match in `/match`. A new channel opens "
+        "in **LFG** using the server's default rules.\n2. Post your claim in that "
+        "channel.\n3. The first other person to reply becomes your challenger. "
+        "The channel moves into ongoing battles automatically, and both opening "
+        "messages count toward the debate.\n4. Continue debating in the same "
+        "channel. Open `/match` for Features, turns, deadlines and controls. "
+        "The opener responds next when alternating turns are enabled.\n\n"
+        "You can cancel your LFG match while waiting. No response deadline runs "
+        "until a challenger joins. Unmatched channels expire after seven days.",
     ),
     "controls": (
         "During a match",
@@ -38,7 +37,8 @@ HELP = {
         "enabled final judging runs. Without judging, the recorded outcome is "
         "inconclusive.\n\n**Propose draw:** both agree to a drawn result.\n\n**Propose "
         "cancellation:** both agree to cancel; authorized staff can cancel "
-        "immediately. A pending challenge can be declined by either participant.\n\n"
+        "immediately. The opener can cancel an LFG match immediately. Legacy "
+        "pending challenges can still be declined by either participant.\n\n"
         "The opponent uses Agree to pending proposal for the exact terms shown. "
         "Results, claims/evidence and permitted feedback are in `/match`. Audience "
         "votes, when enabled, remain separate from judging and ratings.",
@@ -49,8 +49,9 @@ HELP = {
         "enabled final judging. A round comprises two completed participant turns."
         "\n\nBy default, a **24-hour response deadline** starts only after someone is"
         " explicitly designated the next required speaker. Alternating-turn matches"
-        " designate the first speaker at start and then the opponent after each "
-        "completed turn. Flexible order has no response clock until both agree on a"
+        " designate the opener after a challenger joins, then the opponent after "
+        "each completed turn. LFG waiting time has no response clock. Flexible "
+        "order has no response clock until both agree on a"
         " speaker request (or staff designate one). The accepted response window "
         "can differ from 24 hours or be disabled.\n\nIf the required speaker misses "
         "an enabled deadline, they forfeit. An agreed pause freezes remaining time;"
@@ -81,12 +82,12 @@ HELP = {
     ),
     "rules": (
         "Server rules",
-        "The challenger starts with configured server defaults. Presets replace "
-        "feature settings. Research off also disables factual corrections; judging "
+        "New LFG matches use configured server defaults. Research off also "
+        "disables factual corrections; judging "
         "off disables ranked play. Ranked-v1 uses a shared rubric, turns, deadlines"
         " and limits. Reminder lead time must be shorter than the response window. "
         "All AI uses the operator's single OpenCode Go model.\n\nUse Features in "
-        "setup or `/match` to inspect every parameter before confirming. "
+        "`/match` to inspect every parameter. "
         "Administrators manage defaults and presets in `/admin`. Missing or "
         "unavailable AI reports its state while ordinary match management "
         "continues.",
@@ -95,7 +96,8 @@ HELP = {
         "Setup and moderation",
         "Open `/admin` → Set up routes to select active, completed and cancelled "
         "categories. Completed includes concessions and forfeits; the same category "
-        "can serve multiple routes. Output channels and moderator roles are optional. "
+        "can serve multiple routes. The bot creates the **LFG** category automatically "
+        "when needed. Output channels and moderator roles are optional. "
         "Administrator is required for configuration, defaults, server audit and "
         "Connection diagnostic. Advanced server policy retains the documented patch"
         " form for unusual policy changes.\n\nConfigured moderators can select a "

@@ -26,6 +26,7 @@ STAFF_REQUIRED = (
 )
 ROUTES_HELP = (
     "Categories are Discord folders that hold match channels.\n"
+    "• **LFG:** new channels waiting for a claim and a challenger; created automatically.\n"
     "• **Active:** debates in progress.\n"
     "• **Completed:** finished debates, including concessions and forfeits.\n"
     "• **Cancelled:** debates called off without a competitive result.\n\n"
@@ -40,13 +41,13 @@ MISSING_ROUTES = (
     "open `/admin` → **Set up routes**, select Active, Completed and Cancelled, then "
     "click **Save routes**. The same category can be used for all three. "
     "Completed also receives forfeited matches.\n\n"
-    "After saving, run `/challenge @member` again. No challenge has been created yet."
+    "After saving, run `/start` again. No match has been created yet."
 )
 RULES_LOCKED = (
-    "Accepted rules are locked. The claim and features can only be changed "
-    "while a challenge is awaiting confirmation, so neither participant's agreement "
-    "can be changed during a debate. You can still view Features in `/match`. "
-    "Start a new challenge to use different rules. If you also want to end an ongoing "
+    "Match rules are locked. New LFG matches use the server defaults. You can review "
+    "Features in `/match`; administrators can change defaults for future matches in "
+    "`/admin`. Legacy challenges awaiting confirmation can still be edited. "
+    "Use `/start` to open a new match. If you also want to end an ongoing "
     "match, propose cancellation through `/match`."
 )
 PROPOSAL_CHANGED = (

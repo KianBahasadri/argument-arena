@@ -133,11 +133,13 @@ class FeatureControls(PanelAccess, discord.ui.LayoutView):
             else "These are the current settings. Advanced options shows their parameters."
         )
         note = (
-            "Changes apply to new challenges."
+            "Changes apply to new matches."
             if target.server
             else "Changes stay in your draft until you send the challenge."
             if target.draft is not None
             else "Both participants must confirm any changes before the match starts."
+            if current.get("state") == "challenge"
+            else "These match rules are locked. New matches use the server defaults."
         )
         self.add_item(discord.ui.TextDisplay(f"## {title}\n{guidance}\n-# {note}"))
         features = list(FEATURES)

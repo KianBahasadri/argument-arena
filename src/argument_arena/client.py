@@ -95,7 +95,7 @@ class ArenaClient(discord.Client):
         if message.guild and message.guild.id == self.config.guild_id:
             if not await self.gateway.enforce_message(message):
                 return
-            await self.arena.message(
+            recorded = await self.arena.message(
                 str(message.guild.id),
                 str(message.channel.id),
                 str(message.id),
@@ -105,6 +105,9 @@ class ArenaClient(discord.Client):
                 message.created_at.timestamp(),
                 message.author.bot,
             )
+            if not recorded:
+                # A simultaneous challenger may have filled the second seat meanwhile.
+                await self.gateway.enforce_message(message)
 
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent) -> None:
         if payload.guild_id == self.config.guild_id and "content" in payload.data:

@@ -1,6 +1,7 @@
 import asyncio
 import json
 from copy import deepcopy
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -11,6 +12,7 @@ from discord import app_commands
 from argument_arena.admin_ui import OutputsView, RoutesView, show_admin
 from argument_arena.client import ArenaClient
 from argument_arena.config import Config
+from argument_arena.discord_gateway import DiscordGateway
 from argument_arena.help_ui import HELP, show_help
 from argument_arena.match_ui import (
     Draft,
@@ -169,10 +171,10 @@ def draft(client):
     )
 
 
-async def test_registered_surface_is_seven_guild_only_commands_with_one_required_argument(client):
+async def test_registered_surface_is_seven_guild_only_commands_without_arguments(client):
     commands = client.tree.get_commands(guild=client.guild)
     assert {c.name for c in commands} == {
-        "challenge",
+        "start",
         "match",
         "train",
         "profile",
@@ -185,66 +187,117 @@ async def test_registered_surface_is_seven_guild_only_commands_with_one_required
         schema = command.to_dict(client.tree)
         assert schema["dm_permission"] is False
         assert command.guild_only
-        assert [p["name"] for p in schema["options"]] == (
-            ["member"] if command.name == "challenge" else []
-        )
-    assert commands[0].parameters[0].required
+        assert schema["options"] == []
+        assert not command.parameters
 
 
 @pytest.mark.parametrize("channel", [999, 888])
 @pytest.mark.parametrize("claim", ["Publish a shared public record", "*" * 3990 + " FINAL END"])
-async def test_challenge_modal_uses_defaults_and_retains_channel_or_thread_origin(
+async def test_start_opens_lfg_without_a_modal_and_retains_defaults_and_origin(
     client, product, channel, claim
 ):
     await product.arena.setup(ADMIN, {"defaults": {"inactivity": {"hours": 48}}})
     request = interaction(channel=channel)
-    member = SimpleNamespace(id=20, bot=False, guild=SimpleNamespace(id=123))
-    command = client.tree.get_command("challenge", guild=client.guild)
-    await command._do_call(request, {"member": member})
-    form = request.response.send_modal.call_args.args[0]
-    assert len(form.children) == 1
-    assert form.inputs["claim"].to_component_dict()["label"] == "Challengers Claim"
-    assert form.inputs["claim"].max_length == 4000
-    submitted = interaction(channel=channel)
-    await submit_form(
-        form,
-        submitted,
-        claim=claim,
-    )
-    panel = view(submitted)
-    assert isinstance(panel, DraftView)
-    assert panel.draft.settings["inactivity"]["hours"] == 48
-    assert panel.draft.origin.endswith(f"/{channel}")
-    if len(claim) > 700:
-        reading = interaction(channel=channel)
-        await next(item for item in panel.children if item.label == "Read full claim").callback(
-            reading
-        )
-        assert packet(reading).kwargs["embed"].description == claim
-    async with product.arena.repo.unit() as unit:
-        assert not await unit.rows("SELECT id FROM matches")
-        assert not await unit.rows("SELECT id FROM jobs")
-    sent = interaction(channel=channel)
-    await panel.send(sent)
+
+    async def create(job):
+        await product.arena.attach_channel(job["match_id"], "900")
+
+    client.gateway.create.side_effect = create
+    command = client.tree.get_command("start", guild=client.guild)
+    await command._do_call(request, {})
+    request.response.send_modal.assert_not_awaited()
+    client.gateway.create.assert_awaited_once()
+    assert "LFG" in content(request)
     async with product.arena.repo.unit() as unit:
         rows = await unit.rows("SELECT id FROM matches")
         assert len(rows) == 1
-        assert not await unit.rows("SELECT id FROM jobs WHERE kind='create'")
+        assert len(await unit.rows("SELECT id FROM jobs WHERE kind='create'")) == 1
     match = await product.arena.repo.match(rows[0]["id"])
+    assert match["topic"] == "" and match["players"] == [A.id]
+    assert match["state"] == "lfg" and match["channel"] == "900"
+    assert match["next"] is None and match["deadline"] is None
+    assert match["settings"]["inactivity"]["hours"] == 48
+    assert match["origin"].endswith(f"/{channel}")
+    await message(product.arena, match, content=claim)
+    await message(product.arena, match, B, "101", "Here is why I disagree.")
+    match = await product.arena.repo.match(match["id"])
     assert match["topic"] == claim
     assert match["positions"] == [claim, "Challenges the claim."]
-    assert match["origin"].endswith(f"/{channel}")
-    assert match["confirmed"] == [] and match["channel"] is None
-    assert match["settings"]["inactivity"]["hours"] == 48
+    assert match["state"] == "active" and match["players"] == [A.id, B.id]
+    assert match["next"] == A.id and match["deadline"] == product.clock() + 48 * 3600
     if len(claim) > 700:
+        shown = interaction(channel=900)
+        await show_match(shown, client, match["id"])
         reading = interaction(channel=channel)
         await next(
-            item for item in view(sent).children if item.label == "Read full claim"
+            item for item in view(shown).children if item.label == "Read full claim"
         ).callback(reading)
         assert packet(reading).kwargs["embed"].description == claim
-        editing = interaction(channel=channel)
-        await view(sent).selected(editing, "edit")
-        assert editing.response.send_modal.call_args.args[0].inputs["claim"].default == claim
+
+
+async def test_match_picker_starts_and_cancels_lfg_without_an_opponent(client, product):
+    request = interaction()
+    await show_picker(request, client)
+    await next(item for item in view(request).children if item.label == "Start a match").callback(
+        interaction()
+    )
+    listed = interaction()
+    await show_picker(listed, client)
+    selector = next(item for item in view(listed).children if isinstance(item, discord.ui.Select))
+    assert selector.options[0].label.startswith("Awaiting claim")
+    match_id = selector.options[0].value
+    current = interaction()
+    await show_match(current, client, match_id)
+    assert not {"action:accept", "action:edit"} & {
+        item.custom_id for item in view(current).children
+    }
+    cancel = interaction()
+    await choose(view(current), cancel, "cancel")
+    assert "immediately" in content(cancel)
+    await view(cancel).confirm(interaction())
+    assert (await product.arena.repo.match(match_id))["state"] == "closed"
+
+
+async def test_start_keeps_durable_creation_when_discord_is_temporarily_unavailable(
+    client, product
+):
+    client.gateway.create.side_effect = ProviderError("guild_unavailable")
+    request = interaction()
+    await client.tree.get_command("start", guild=client.guild)._do_call(request, {})
+    assert "being created" in content(request)
+    request.response.send_modal.assert_not_awaited()
+    async with product.arena.repo.unit() as unit:
+        assert len(await unit.rows("SELECT id FROM matches WHERE state='lfg'")) == 1
+        assert (
+            len(await unit.rows("SELECT id FROM jobs WHERE kind='create' AND state='pending'")) == 1
+        )
+
+
+async def test_gateway_keeps_the_official_reply_that_finishes_a_match(client, product):
+    await product.arena.setup(
+        ADMIN,
+        {"defaults": {"judging": {"enabled": False}, "limits": {"enabled": True, "rounds": 1}}},
+    )
+    match = await product.arena.open_match(A, "url")
+    await product.arena.attach_channel(match["id"], "900")
+    client.gateway = DiscordGateway(client, product.arena)
+    posts = [
+        SimpleNamespace(
+            id=100 + index,
+            guild=SimpleNamespace(id=123),
+            channel=SimpleNamespace(id=900),
+            author=SimpleNamespace(id=member, bot=False, roles=[]),
+            content="An opening argument.",
+            jump_url=f"https://discord.com/channels/123/900/{100 + index}",
+            created_at=datetime.now(UTC),
+            delete=AsyncMock(),
+        )
+        for index, member in enumerate((10, 20))
+    ]
+    for post in posts:
+        await client.on_message(post)
+        post.delete.assert_not_awaited()
+    assert (await product.arena.repo.match(match["id"]))["state"] == "closed"
 
 
 async def test_draft_validation_cancel_expiry_and_double_send_leave_no_active_channel(
@@ -802,7 +855,7 @@ async def test_help_is_ephemeral_in_channels_and_threads_with_valid_guidance(cli
     for channel in (999, 888):
         request = interaction(30, channel=channel)
         await client.tree.get_command("help", guild=client.guild)._do_call(request, {})
-        assert "/challenge @member" in content(request)
+        assert "/start" in content(request)
         assert "action:admin" not in [item.custom_id for item in view(request).children]
     for key, (title, description) in HELP.items():
         request = interaction(40, True)
@@ -880,8 +933,8 @@ def test_invalid_advanced_settings_json_has_actionable_error():
 async def test_missing_routes_explain_setup_without_creating_a_match(client, product):
     await product.arena.setup(ADMIN, {"categories": {"active": None}})
     request = interaction()
-    command = client.tree.get_command("challenge", guild=client.guild)
-    await command._do_call(request, {"member": SimpleNamespace(id=20, bot=False)})
+    command = client.tree.get_command("start", guild=client.guild)
+    await command._do_call(request, {})
     message = content(request)
     assert "folder" in message and "Set up routes" in message and "Save routes" in message
     assert "same category" in message and "forfeited" in message

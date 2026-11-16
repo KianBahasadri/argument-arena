@@ -74,7 +74,7 @@ class Worker:
                 await self.gateway.create(job)
             case "archive":
                 await self.gateway.archive(job)
-            case "permissions":
+            case "permissions" | "activate":
                 await self.gateway.permissions(job)
             case "notice":
                 await self.gateway.notice(job)

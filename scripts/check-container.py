@@ -53,11 +53,16 @@ async def exercise():
         match_id = await db.get('validation', 'match')
         if match_id is None:
             await arena.setup(owner, {'categories': {'active': '1'}})
-            match = await arena.challenge(owner, opponent.id, 'Offline product recovery',
-                                           ['Support', 'Oppose'], 'https://discord.com/channels/123/999')
-            await arena.accept(owner, match['id'], 1)
-            await arena.accept(opponent, match['id'], 1)
+            match = await arena.open_match(owner, 'https://discord.com/channels/123/999')
             await arena.attach_channel(match['id'], '900')
+            assert (await arena.repo.match(match['id']))['state'] == 'lfg'
+            await arena.message('123', '900', '100', owner.id, 'Offline product recovery',
+                                'https://discord.com/channels/123/900/100', arena.clock())
+            await arena.message('123', '900', '101', opponent.id, 'An offline challenge',
+                                'https://discord.com/channels/123/900/101', arena.clock())
+            started = await arena.repo.match(match['id'])
+            assert started['state'] == 'active' and started['next'] == owner.id
+            assert started['message_count'] == 2
             await arena.action(owner, match['id'], 'concede')
             await db.put('validation', 'match', match['id'])
             await Training(arena, OpenAI()).start(owner, 'repair')

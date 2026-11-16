@@ -24,7 +24,7 @@ from argument_arena.settings import (
 )
 
 MAX_CLAIM_LENGTH = 4000
-OPEN = {"challenge", "starting", "active", "paused", "judging"}
+OPEN = {"lfg", "challenge", "starting", "active", "paused", "judging"}
 
 
 def identity():
@@ -98,6 +98,82 @@ class Arena:
             await unit.event(f"guild:{actor.guild}", "setup", actor.id, patch, self.clock())
             return config
 
+    def _new_match(self, actor, players, topic, positions, origin, config, settings, state):
+        return {
+            "id": config["match_prefix"] + identity(),
+            "guild": actor.guild,
+            "players": players,
+            "topic": topic,
+            "positions": positions,
+            "origin": origin,
+            "state": state,
+            "created": self.clock(),
+            "settings": settings,
+            "revision": 1,
+            "confirmed": [],
+            "channel": None,
+            "next": None,
+            "deadline": None,
+            "remaining": None,
+            "turn": 0,
+            "turn_counts": dict.fromkeys(players, 0),
+            "message_count": 0,
+            "transcript_version": 0,
+            "analysis_version": 0,
+            "proposal": None,
+            "on_demand_count": 0,
+            "research_count": 0,
+            "archived": False,
+            "vote_until": None,
+            "votes": {},
+            "rating_policy": {
+                k: config[k] for k in ("rating_initial", "rating_k", "repeat_opponent_daily")
+            },
+        }
+
+    async def _check_capacity(self, unit, guild, players, config):
+        rows = await unit.rows(
+            "SELECT data FROM matches WHERE guild=? AND state!='closed'", (guild,)
+        )
+        for player in players:
+            count = sum(player in json.loads(row["data"])["players"] for row in rows)
+            if count >= config["max_concurrent"]:
+                raise ArenaError(
+                    "A participant has reached this server's concurrent match limit "
+                    f"of {config['max_concurrent']}. LFG channels, pending challenges and "
+                    "matches in progress all count. Open `/match` to finish or cancel an "
+                    "existing match before trying again."
+                )
+
+    async def open_match(self, actor, origin):
+        if actor.bot:
+            raise ArenaError("Only human server members can open an LFG match.")
+        now = self.clock()
+        async with self.repo.unit() as unit:
+            config = await unit.document("guild", actor.guild, server_defaults())
+            if not config["categories"]["active"]:
+                raise ArenaError(MISSING_ROUTES)
+            recent = await unit.document("challenge_clock", f"{actor.guild}:{actor.id}", 0)
+            if now - recent < config["challenge_cooldown"]:
+                seconds = math.ceil(config["challenge_cooldown"] - (now - recent))
+                raise ArenaError(f"Match cooldown active. Wait {seconds} seconds before /start.")
+            await self._check_capacity(unit, actor.guild, [actor.id], config)
+            match = self._new_match(
+                actor,
+                [actor.id],
+                "",
+                ["", "Challenges the claim."],
+                origin,
+                config,
+                match_settings(config["defaults"]),
+                "lfg",
+            )
+            await unit.save_match(match)
+            await unit.save("challenge_clock", f"{actor.guild}:{actor.id}", now)
+            await unit.event(match["id"], "opened", actor.id, {"origin": origin}, now)
+            await unit.job(f"create:{match['id']}", "create", match["id"], {}, now)
+            return match
+
     async def challenge(
         self, actor, opponent, topic, positions, origin, preset="default", *, settings=None
     ):
@@ -128,52 +204,13 @@ class Arena:
                     "send challenges; an administrator can review the cooldown policy "
                     "in `/admin` → View server configuration."
                 )
-            rows = await unit.rows(
-                "SELECT data FROM matches WHERE guild=? AND state!='closed'", (actor.guild,)
-            )
-            for player in (actor.id, opponent):
-                count = sum(player in json.loads(row["data"])["players"] for row in rows)
-                if count >= config["max_concurrent"]:
-                    raise ArenaError(
-                        "A participant has reached this server's concurrent match limit "
-                        f"of {config['max_concurrent']}. Pending challenges and matches in "
-                        "progress both count. Open `/match` to finish or decline an existing "
-                        "match, or ask an administrator to review the limit before trying again."
-                    )
+            await self._check_capacity(unit, actor.guild, [actor.id, opponent], config)
             settings = match_settings(
                 settings, config["defaults"] if preset == "default" else config["presets"][preset]
             )
-            match = {
-                "id": config["match_prefix"] + identity(),
-                "guild": actor.guild,
-                "players": [actor.id, opponent],
-                "topic": topic,
-                "positions": positions,
-                "origin": origin,
-                "state": "challenge",
-                "created": now,
-                "settings": settings,
-                "revision": 1,
-                "confirmed": [],
-                "channel": None,
-                "next": None,
-                "deadline": None,
-                "remaining": None,
-                "turn": 0,
-                "turn_counts": {actor.id: 0, opponent: 0},
-                "message_count": 0,
-                "transcript_version": 0,
-                "analysis_version": 0,
-                "proposal": None,
-                "on_demand_count": 0,
-                "research_count": 0,
-                "archived": False,
-                "vote_until": None,
-                "votes": {},
-                "rating_policy": {
-                    k: config[k] for k in ("rating_initial", "rating_k", "repeat_opponent_daily")
-                },
-            }
+            match = self._new_match(
+                actor, [actor.id, opponent], topic, positions, origin, config, settings, "challenge"
+            )
             await unit.save_match(match)
             await unit.save("challenge_clock", f"{actor.guild}:{actor.id}", now)
             await unit.event(match["id"], "challenge", actor.id, match, now)
@@ -260,9 +297,20 @@ class Arena:
     async def attach_channel(self, match_id, channel):
         async with self.repo.unit() as unit:
             match = await unit.match(match_id)
-            if match["state"] != "starting":
+            if match["state"] not in {"starting", "lfg"} or match["channel"]:
                 return
             match["channel"] = channel
+            if match["state"] == "lfg":
+                await unit.save_match(match)
+                await unit.notice(
+                    match,
+                    f"lfg:{match_id}",
+                    f"<@{match['players'][0]}>, post your claim here. The first other person "
+                    "to reply will challenge it and start the battle. This channel will move "
+                    "to ongoing battles. Open /match to review the rules or cancel while waiting.",
+                    self.clock(),
+                )
+                return
             match["state"] = "active"
             if match["settings"]["turns"]["enabled"]:
                 self._speaker(match, match["players"][match["settings"]["turns"]["first"]])
@@ -321,7 +369,8 @@ class Arena:
             if not row:
                 return False  # Threads have different IDs and cannot enter the transcript.
             match = json.loads(row["data"])
-            if match["state"] != "active" or author not in match["players"]:
+            waiting = match["state"] == "lfg"
+            if not waiting and (match["state"] != "active" or author not in match["players"]):
                 return False
             if await unit.one("SELECT id FROM messages WHERE id=?", (message_id,)):
                 return False
@@ -335,8 +384,72 @@ class Arena:
                     self.clock(),
                 )
                 return False
+            joining = waiting and author != match["players"][0]
+            if waiting:
+                if not match["topic"]:
+                    if joining:
+                        return False
+                    if not 3 <= len(content.strip()) <= MAX_CLAIM_LENGTH:
+                        await unit.notice(
+                            match,
+                            f"claim-length:{message_id}",
+                            f"Post a claim using 3–{MAX_CLAIM_LENGTH} characters to begin.",
+                            self.clock(),
+                        )
+                        return False
+                    match["topic"] = content.strip()
+                    match["positions"][0] = content.strip()
+                    match["claim_message"] = message_id
+                elif joining:
+                    config = await unit.document("guild", guild, server_defaults())
+                    try:
+                        await self._check_capacity(unit, guild, [author], config)
+                    except ArenaError as error:
+                        await unit.notice(
+                            match, f"join-limit:{message_id}", str(error), self.clock()
+                        )
+                        return False
+                    match["players"].append(author)
+                    match["confirmed"] = list(match["players"])
+                    match["state"] = "active"
+                    match["turn"] = 1
+                    match["turn_counts"] = {match["players"][0]: 1, author: 0}
+                    match["next"] = author if match["settings"]["turns"]["enabled"] else None
+                    opening = await unit.rows(
+                        "SELECT id,revision,deleted FROM messages WHERE match_id=? "
+                        "ORDER BY created,id",
+                        (match["id"],),
+                    )
+                    for sequence, previous in enumerate(opening, 1):
+                        if not previous["deleted"]:
+                            await unit.job(
+                                f"analyze:{previous['id']}:{previous['revision']}",
+                                "analyze",
+                                match["id"],
+                                {
+                                    "message": previous["id"],
+                                    "revision": previous["revision"],
+                                    "sequence": sequence,
+                                },
+                                self.clock(),
+                            )
+                    if match["settings"]["turns"]["structure"] == "submit":
+                        match["submitted"] = [m["id"] for m in opening] + [message_id]
+                    await unit.job(
+                        f"activate:{match['id']}", "activate", match["id"], {}, self.clock()
+                    )
+                    await unit.event(
+                        match["id"], "started", author, {"players": match["players"]}, self.clock()
+                    )
+                    await unit.notice(
+                        match,
+                        f"start:{match['id']}",
+                        f"<@{author}> challenged <@{match['players'][0]}>'s claim. Battle started! "
+                        "Open /match for the current turn, deadline and controls.",
+                        self.clock(),
+                    )
             turns = match["settings"]["turns"]
-            if turns["enabled"] and match["next"] != author:
+            if not waiting and turns["enabled"] and match["next"] != author:
                 await unit.notice(
                     match,
                     f"order:{message_id}",
@@ -355,6 +468,9 @@ class Arena:
             )
             match["message_count"] += 1
             match["transcript_version"] += 1
+            if waiting and not joining:
+                await unit.save_match(match)
+                return True
             await unit.job(
                 f"analyze:{message_id}:1",
                 "analyze",
@@ -362,7 +478,7 @@ class Arena:
                 {"message": message_id, "revision": 1, "sequence": match["message_count"]},
                 self.clock(),
             )
-            if turns["structure"] == "message" or not turns["enabled"]:
+            if joining or turns["structure"] == "message" or not turns["enabled"]:
                 await self._advance(unit, match, author)
             elif limits["enabled"] and match["message_count"] >= limits["messages"]:
                 await self._finish(unit, match)
@@ -390,7 +506,7 @@ class Arena:
                 )
             row = await unit.one(
                 "SELECT id FROM messages WHERE match_id=? AND author=? "
-                "AND deleted=0 ORDER BY created DESC LIMIT 1",
+                "AND deleted=0 ORDER BY created DESC,id DESC LIMIT 1",
                 (match_id, actor.id),
             )
             if not row or row["id"] in match.get("submitted", []):
@@ -424,6 +540,12 @@ class Arena:
             )
             match = await unit.match(row["match_id"])
             match["transcript_version"] += 1
+            if match["state"] == "lfg" and match.get("claim_message") == message_id:
+                claim = content.strip()
+                match["topic"] = (
+                    claim if not deleted and 3 <= len(claim) <= MAX_CLAIM_LENGTH else ""
+                )
+                match["positions"][0] = match["topic"]
             for claim in await unit.rows(
                 "SELECT id,data FROM claims WHERE message_id=?", (message_id,)
             ):
@@ -433,7 +555,7 @@ class Arena:
                 await unit.db.execute(
                     "UPDATE claims SET data=? WHERE id=?", (encode(data), claim["id"])
                 )
-            if not deleted:
+            if not deleted and match["state"] != "lfg":
                 await unit.job(
                     f"analyze:{message_id}:{revision}",
                     "analyze",
@@ -554,7 +676,9 @@ class Arena:
                         " in Status instead."
                     )
                 proposal = match["proposal"]
-                if not staff and not (
+                if action == "cancel" and match["state"] == "lfg":
+                    await self._close(unit, match, "cancelled", None, "LFG match cancelled")
+                elif not staff and not (
                     proposal
                     and proposal["action"] == action
                     and proposal["data"] == data
@@ -914,13 +1038,13 @@ class Arena:
             outage = not connected or not previous["connected"] or gap > 60
             await unit.save("worker", "clock", {"at": now, "connected": connected})
             for row in await unit.rows(
-                "SELECT data FROM matches WHERE state IN ('active','challenge')"
+                "SELECT data FROM matches WHERE state IN ('active','challenge','lfg')"
             ):
                 match = json.loads(row["data"])
-                if match["state"] == "challenge":
+                if match["state"] in {"challenge", "lfg"}:
                     if now - match["created"] > 7 * 86400:
                         await self._close(
-                            unit, match, "cancelled", None, "Challenge expired after 7 days"
+                            unit, match, "cancelled", None, "Unmatched debate expired after 7 days"
                         )
                 elif match["deadline"] is not None:
                     if outage:

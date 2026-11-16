@@ -5,7 +5,7 @@ from discord import app_commands
 
 from argument_arena.admin_ui import show_admin
 from argument_arena.help_ui import show_help
-from argument_arena.match_ui import open_matches, start_challenge
+from argument_arena.match_ui import open_matches, start_match
 from argument_arena.member_ui import show_leaderboard, show_profile, show_training
 from argument_arena.settings import ArenaError
 from argument_arena.ui import respond
@@ -13,13 +13,12 @@ from argument_arena.ui import respond
 
 def register(client):
     @app_commands.command(
-        name="challenge", description="Choose an opponent, then set up a debate together"
+        name="start", description="Open a match channel in LFG, then post your claim there"
     )
     @app_commands.guild_only()
-    @app_commands.describe(member="The human server member you want to challenge")
-    async def challenge(interaction: discord.Interaction, member: discord.Member):
+    async def start(interaction: discord.Interaction):
         try:
-            await start_challenge(interaction, client, member)
+            await start_match(interaction, client)
         except ArenaError as error:
             await respond(interaction, str(error))
 
@@ -71,5 +70,5 @@ def register(client):
     async def help_command(interaction: discord.Interaction):
         await show_help(interaction, client)
 
-    for command in (challenge, matches, train, profile, standings, admin, help_command):
+    for command in (start, matches, train, profile, standings, admin, help_command):
         client.tree.add_command(command, guild=client.guild)

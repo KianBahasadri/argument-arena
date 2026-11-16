@@ -136,6 +136,7 @@ def _config(config):
     return "\n".join(
         [
             "Server setup",
+            "LFG: created automatically for new matches.",
             route("active"),
             route("completed"),
             route("cancelled"),
@@ -143,7 +144,7 @@ def _config(config):
             "Results channel: " + (config["results"] or "not set"),
             "Moderator roles: " + (", ".join(roles) if roles else "none"),
             f"Each member may have {config['max_concurrent']} open matches.",
-            f"Challenge cooldown: {config['challenge_cooldown']} seconds.",
+            f"Match creation cooldown: {config['challenge_cooldown']} seconds.",
             f"Daily research limit: {config['research_daily']}.",
             f"Daily model limit: {config['llm_daily']}. Per match: {config['llm_match']}.",
             f"Starting rating {config['rating_initial']}, step {config['rating_k']}.",
