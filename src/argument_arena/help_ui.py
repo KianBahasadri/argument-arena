@@ -131,8 +131,4 @@ async def show_help(interaction, client, topic="start"):
 
         panel.button("View server configuration", configuration, row=4)
     embed = discord.Embed(title=title, description=description)
-    embed.set_footer(
-        text="/challenge · /match · /train · /profile · /leaderboard · /admin · /help | "
-        "Only you can see this panel."
-    )
     await respond(interaction, embed, panel)
